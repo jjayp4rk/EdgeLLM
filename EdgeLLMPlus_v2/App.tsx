@@ -11,15 +11,21 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  NativeEventEmitter,
+  NativeModules,
 } from "react-native";
-
+import Voice, {
+  SpeechResultsEvent,
+  SpeechErrorEvent,
+} from "@react-native-voice/voice";
+import Icon from "react-native-vector-icons/FontAwesome";
 import Markdown from "react-native-markdown-display";
-
-import { initLlama, releaseAllLlama } from "llama.rn"; // Import llama.rn
-import { downloadModel } from "./src/api/model"; // Download function
-import ProgressBar from "./src/components/ProgressBar"; // Progress bar component
-import RNFS from "react-native-fs"; // File system module
+import { initLlama, releaseAllLlama } from "llama.rn";
+import { downloadModel } from "./src/api/model";
+import ProgressBar from "./src/components/ProgressBar";
+import RNFS from "react-native-fs";
 import axios from "axios";
+import { initializeTtsListeners, playTTS } from "./src/ttsListeners";
 
 type Message = {
   role: "user" | "assistant" | "system";
@@ -28,12 +34,20 @@ type Message = {
   showThought?: boolean;
 };
 
+// Fix regex flags by using a simpler pattern
+const cleanThinkBlocks = (text: string) => {
+  return text
+    .replace(/<think>/g, "")
+    .replace(/<\/think>/g, "")
+    .trim();
+};
+
 function App(): React.JSX.Element {
   const INITIAL_CONVERSATION: Message[] = [
     {
       role: "system",
       content:
-        "This is a conversation between a child and an assistant, a friendly and engagingchatbot. Please be very friendly and engaging. Do not say violent or inappropriate things.",
+        "This is a conversation between user and assistant, a friendly chatbot.",
     },
   ];
   const [context, setContext] = useState<any>(null);
@@ -54,6 +68,7 @@ function App(): React.JSX.Element {
   const [isFetching, setIsFetching] = useState<boolean>(false);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const [downloadedModels, setDownloadedModels] = useState<string[]>([]);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
 
   const modelFormats = [
     { label: "Llama-3.2-1B-Instruct" },
@@ -249,24 +264,35 @@ function App(): React.JSX.Element {
 
   const loadModel = async (modelName: string) => {
     try {
+      console.log("Starting model load process for:", modelName);
       const destPath = `${RNFS.DocumentDirectoryPath}/${modelName}`;
-      console.log("destPath : ", destPath);
+      console.log("Model path:", destPath);
+
+      // Check if file exists
+      const exists = await RNFS.exists(destPath);
+      console.log("Model file exists:", exists);
+
       if (context) {
+        console.log("Releasing existing context");
         await releaseAllLlama();
         setContext(null);
         setConversation(INITIAL_CONVERSATION);
       }
+
+      console.log("Initializing new Llama context");
       const llamaContext = await initLlama({
         model: destPath,
         use_mlock: true,
         n_ctx: 2048,
         n_gpu_layers: 1,
       });
+
+      console.log("Llama context initialized successfully");
       setContext(llamaContext);
       Alert.alert("Model Loaded", "The model was successfully loaded.");
       return true;
     } catch (error) {
-      console.log("error : ", error);
+      console.error("Error in loadModel:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
       Alert.alert("Error Loading Model", errorMessage);
@@ -275,19 +301,28 @@ function App(): React.JSX.Element {
   };
 
   const handleSendMessage = async () => {
+    console.log("Starting handleSendMessage");
+    console.log("Current context:", context ? "Available" : "Not available");
+
     if (!context) {
+      console.log("No context available - model not loaded");
       Alert.alert("Model Not Loaded", "Please load the model first.");
       return;
     }
+
     if (!userInput.trim()) {
+      console.log("Empty user input");
       Alert.alert("Input Error", "Please enter a message.");
       return;
     }
 
+    console.log("Preparing to send message:", userInput);
     const newConversation: Message[] = [
       ...conversation,
       { role: "user", content: userInput },
     ];
+    console.log("New conversation length:", newConversation.length);
+
     setConversation(newConversation);
     setUserInput("");
     setIsLoading(true);
@@ -295,6 +330,7 @@ function App(): React.JSX.Element {
     setAutoScrollEnabled(true);
 
     try {
+      console.log("Starting completion request");
       const stopWords = [
         "</s>",
         "<|end|>",
@@ -304,7 +340,7 @@ function App(): React.JSX.Element {
         "<|eot_id|>",
         "<|end▁of▁sentence|>",
         "<|end_of_text|>",
-        "<｜end▁of▁sentence｜>",
+        "",
       ];
       const chat = newConversation;
 
@@ -318,9 +354,11 @@ function App(): React.JSX.Element {
           showThought: false,
         },
       ]);
+
       let currentAssistantMessage = "";
       let currentThought = "";
       let inThinkBlock = false;
+
       interface CompletionData {
         token: string;
       }
@@ -331,15 +369,43 @@ function App(): React.JSX.Element {
         };
       }
 
+      console.log("Calling context.completion with chat length:", chat.length);
+
+      // Format the conversation into a prompt the model understands
+      const formattedPrompt =
+        chat
+          .map((msg) => {
+            if (msg.role === "system") {
+              return `<|im_start|>system\n${msg.content}<|im_end|>\n`;
+            } else if (msg.role === "user") {
+              return `<|im_start|>user\n${msg.content}<|im_end|>\n`;
+            } else {
+              return `<|im_start|>assistant\n${msg.content}<|im_end|>\n`;
+            }
+          })
+          .join("") + "<|im_start|>assistant\n";
+
+      console.log("Formatted prompt:", formattedPrompt);
+
       const result: CompletionResult = await context.completion(
         {
+          prompt: formattedPrompt,
           messages: chat,
-          n_predict: 10000,
-          stop: stopWords,
+          n_predict: 1000,
+          stop: ["<|im_end|>", "<|im_start|>"],
+          temperature: 0.7,
+          repeat_penalty: 1.1,
+          top_k: 40,
+          top_p: 0.9,
         },
         (data: CompletionData) => {
-          const token = data.token; // Extract the token
-          currentAssistantMessage += token; // Append token to the current message
+          if (!data || !data.token) {
+            console.log("Received empty or invalid token data:", data);
+            return;
+          }
+
+          const token = data.token;
+          currentAssistantMessage += token;
 
           if (token.includes("<think>")) {
             inThinkBlock = true;
@@ -351,16 +417,11 @@ function App(): React.JSX.Element {
             setConversation((prev) => {
               const lastIndex = prev.length - 1;
               const updated = [...prev];
-
               updated[lastIndex] = {
                 ...updated[lastIndex],
-                content: updated[lastIndex].content.replace(
-                  `<think>${finalThought}</think>`,
-                  ""
-                ),
+                content: cleanThinkBlocks(updated[lastIndex].content),
                 thought: finalThought,
               };
-
               return updated;
             });
 
@@ -369,14 +430,15 @@ function App(): React.JSX.Element {
             currentThought += token;
           }
 
-          const visibleContent = currentAssistantMessage
-            .replace(/<think>.*?<\/think>/gs, "")
-            .trim();
+          const visibleContent = cleanThinkBlocks(currentAssistantMessage);
 
           setConversation((prev) => {
             const lastIndex = prev.length - 1;
             const updated = [...prev];
-            updated[lastIndex].content = visibleContent;
+            updated[lastIndex] = {
+              ...updated[lastIndex],
+              content: visibleContent,
+            };
             return updated;
           });
 
@@ -385,22 +447,117 @@ function App(): React.JSX.Element {
               scrollViewRef.current?.scrollToEnd({ animated: false });
             });
           }
+
+          // Only update tokens per second if result is available
+          if (result && result.timings) {
+            setTokensPerSecond((prev) => [
+              ...prev,
+              result.timings.predicted_per_second,
+            ]);
+          }
         }
       );
 
-      setTokensPerSecond((prev) => [
-        ...prev,
-        parseFloat(result.timings.predicted_per_second.toFixed(2)),
-      ]);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
-      Alert.alert("Error During Inference", errorMessage);
-    } finally {
-      setIsLoading(false);
+      console.log("Completion finished successfully");
+
+      // After completion finishes, speak the assistant's response
+      const finalMessage = cleanThinkBlocks(currentAssistantMessage);
+      if (finalMessage.trim()) {
+        playTTS(finalMessage);
+      }
+
+      // Update final conversation state
+      setConversation((prev) => {
+        const lastIndex = prev.length - 1;
+        const updated = [...prev];
+        updated[lastIndex] = {
+          ...updated[lastIndex],
+          content: finalMessage,
+        };
+        return updated;
+      });
+
+      // Only update final tokens per second if result is available
+      if (result && result.timings) {
+        setTokensPerSecond((prev) => [
+          ...prev,
+          result.timings.predicted_per_second,
+        ]);
+      }
+
       setIsGenerating(false);
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Error in handleSendMessage:", error);
+      setIsGenerating(false);
+      setIsLoading(false);
+      Alert.alert("Error", "Failed to generate response. Please try again.");
     }
   };
+
+  const startRecording = async () => {
+    try {
+      console.log("Starting voice recording...");
+      await Voice.start("en-US");
+      setIsRecording(true);
+      console.log("Voice recording started successfully");
+    } catch (error) {
+      console.error("Error starting voice recording:", error);
+      Alert.alert("Voice Error", "Failed to start voice recording");
+    }
+  };
+
+  const stopRecording = async () => {
+    try {
+      console.log("Stopping voice recording...");
+      await Voice.stop();
+      setIsRecording(false);
+      console.log("Voice recording stopped successfully");
+    } catch (error) {
+      console.error("Error stopping voice recording:", error);
+      Alert.alert("Voice Error", "Failed to stop voice recording");
+    }
+  };
+
+  const toggleRecording = async () => {
+    if (isRecording) {
+      await stopRecording();
+    } else {
+      await startRecording();
+    }
+  };
+
+  useEffect(() => {
+    // Voice event handlers
+    Voice.onSpeechStart = () => {
+      console.log("Voice recognition started");
+    };
+
+    Voice.onSpeechEnd = () => {
+      console.log("Voice recognition ended");
+    };
+
+    Voice.onSpeechResults = (e: SpeechResultsEvent) => {
+      console.log("Voice results received:", e.value);
+      if (e.value) {
+        setUserInput(e.value[0]);
+      }
+    };
+
+    Voice.onSpeechError = (e: SpeechErrorEvent) => {
+      console.error("Voice recognition error:", e);
+      Alert.alert("Voice Error", "Failed to recognize speech");
+    };
+
+    return () => {
+      console.log("Cleaning up voice recognition...");
+      Voice.destroy().then(Voice.removeAllListeners);
+    };
+  }, []);
+
+  useEffect(() => {
+    initializeTtsListeners();
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -529,7 +686,7 @@ function App(): React.JSX.Element {
                       >
                         {msg.thought && (
                           <TouchableOpacity
-                            onPress={() => toggleThought(index + 1)} // +1 to account for slice(1)
+                            onPress={() => toggleThought(index + 1)}
                             style={styles.toggleButton}
                           >
                             <Text style={styles.toggleText}>
@@ -553,10 +710,7 @@ function App(): React.JSX.Element {
                       </Text>
                     </View>
                     {msg.role === "assistant" && (
-                      <Text
-                        style={styles.tokenInfo}
-                        onPress={() => console.log("index : ", index)}
-                      >
+                      <Text style={styles.tokenInfo}>
                         {tokensPerSecond[Math.floor(index / 2)]} tokens/s
                       </Text>
                     )}
@@ -577,40 +731,50 @@ function App(): React.JSX.Element {
           {currentPage === "conversation" && (
             <>
               <View style={styles.inputContainer}>
-                <View style={styles.inputRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.iconButton,
+                    isRecording && styles.iconButtonActive,
+                  ]}
+                  onPress={toggleRecording}
+                >
+                  <Icon
+                    name={isRecording ? "microphone-slash" : "microphone"}
+                    size={24}
+                    color="#FFFFFF"
+                  />
+                </TouchableOpacity>
+
+                <View style={styles.inputWrapper}>
                   <TextInput
                     style={styles.input}
-                    placeholder="Type your message..."
-                    placeholderTextColor="#94A3B8"
                     value={userInput}
                     onChangeText={setUserInput}
+                    placeholder="Type your message..."
+                    multiline
                   />
-                  {isGenerating ? (
-                    <TouchableOpacity
-                      style={styles.stopButton}
-                      onPress={stopGeneration}
-                    >
-                      <Text style={styles.buttonText}>□ Stop</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.sendButton}
-                      onPress={handleSendMessage}
-                      disabled={isLoading}
-                    >
-                      <Text style={styles.buttonText}>
-                        {isLoading ? "Sending..." : "Send"}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
                 </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.iconButton,
+                    (!userInput.trim() || isLoading) &&
+                      styles.iconButtonDisabled,
+                  ]}
+                  onPress={handleSendMessage}
+                  disabled={isLoading || !userInput.trim()}
+                >
+                  <Icon name="send" size={24} color="#FFFFFF" />
+                </TouchableOpacity>
               </View>
+
               <TouchableOpacity
                 style={styles.backButton}
                 onPress={handleBackToModelSelection}
               >
+                <Icon name="chevron-left" size={24} color="#FFFFFF" />
                 <Text style={styles.backButtonText}>
-                  ← Back to Model Selection
+                  Back to Model Selection
                 </Text>
               </TouchableOpacity>
             </>
@@ -695,15 +859,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#3B82F6",
     marginHorizontal: 16,
     marginTop: 8,
+    marginBottom: Platform.OS === "ios" ? 20 : 10,
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 12,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
   },
   backButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
+    marginLeft: 8,
   },
   chatContainer: {
     flex: 1,
@@ -744,50 +912,48 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
     padding: 16,
     backgroundColor: "#FFFFFF",
     borderTopWidth: 1,
     borderTopColor: "#E2E8F0",
   },
-  input: {
+  inputWrapper: {
     flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#E2E8F0",
     borderRadius: 12,
-    padding: 16,
+    marginHorizontal: 8,
+    paddingHorizontal: 12,
+  },
+  inputIcon: {
+    marginRight: 8,
+  },
+  input: {
+    flex: 1,
     fontSize: 16,
     color: "#334155",
-    minHeight: 50,
+    minHeight: 24,
+    padding: 8,
   },
-  inputRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  sendButton: {
+  iconButton: {
     backgroundColor: "#3B82F6",
-    paddingVertical: 14,
-    paddingHorizontal: 24,
+    padding: 12,
     borderRadius: 12,
-    shadowColor: "#3B82F6",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 2,
-    alignSelf: "stretch",
     justifyContent: "center",
+    alignItems: "center",
+    width: 46,
+    height: 46,
   },
-
-  stopButton: {
-    backgroundColor: "#FF3B30",
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    alignSelf: "stretch",
-    justifyContent: "center",
+  iconButtonActive: {
+    backgroundColor: "#EF4444", // Red color when recording
+  },
+  iconButtonDisabled: {
+    backgroundColor: "#93C5FD", // Lighter blue when disabled
   },
   greetingText: {
     fontSize: 12,
@@ -910,15 +1076,25 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  loadModelText: {
-    color: "#3B82F6",
-    fontSize: 8,
+  buttonTextGGUF: {
+    color: "#64748B",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+
+  selectedButtonText: {
+    color: "#1E40AF",
     fontWeight: "600",
-    letterSpacing: 0.5,
+  },
+
+  loadModelText: {
+    color: "#2563EB",
+    fontSize: 12,
+    fontWeight: "500",
   },
 
   downloadIndicator: {
-    backgroundColor: "#DCF9E5", // Light green background
+    backgroundColor: "#F1F5F9",
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 6,
@@ -926,21 +1102,9 @@ const styles = StyleSheet.create({
   },
 
   downloadText: {
-    color: "#16A34A", // Green text
-    fontSize: 8,
-    fontWeight: "600",
-    letterSpacing: 0.5,
-  },
-
-  buttonTextGGUF: {
-    color: "#1E40AF",
-    fontSize: 14,
+    color: "#94A3B8",
+    fontSize: 12,
     fontWeight: "500",
-  },
-
-  selectedButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
   },
 });
 
