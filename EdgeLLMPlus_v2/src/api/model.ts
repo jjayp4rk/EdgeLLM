@@ -7,59 +7,69 @@ export const downloadModel = async (
 ): Promise<string> => {
   const destPath = `${RNFS.DocumentDirectoryPath}/${modelName}`;
   try {
-    const fileExists = await RNFS.exists(destPath);
-
-    // If it exists, delete it
-    if (fileExists) {
-      await RNFS.unlink(destPath);
-      console.log(`Deleted existing file at ${destPath}`);
+    // Check if the destination path is valid
+    if (!modelName || !modelUrl) {
+      throw new Error("Invalid model name or URL");
     }
-    console.log("right before download")
-    console.log("modelUrl : ", modelUrl)
 
+    // Check if file already exists
+    const fileExists = await RNFS.exists(destPath);
+    if (fileExists) {
+      console.log(`File already exists at ${destPath}`);
+      return destPath;
+    }
+
+    console.log("Starting download from:", modelUrl);
     const downloadResult = await RNFS.downloadFile({
       fromUrl: modelUrl,
       toFile: destPath,
       progressDivider: 5,
       begin: (res) => {
-        console.log("Response begin ===\n\n");
-        console.log(res);
+        console.log("Download started:", res);
       },
-      progress: ({ bytesWritten, contentLength }: { bytesWritten: number; contentLength: number }) => {
-        console.log("Response written ===\n\n");
+      progress: ({
+        bytesWritten,
+        contentLength,
+      }: {
+        bytesWritten: number;
+        contentLength: number;
+      }) => {
         const progress = (bytesWritten / contentLength) * 100;
-        console.log("progress : ",progress)
+        console.log("Download progress:", progress);
         onProgress(Math.floor(progress));
       },
     }).promise;
-    console.log("right after download")
+
     if (downloadResult.statusCode === 200) {
+      console.log("Download completed successfully");
       return destPath;
     } else {
-      throw new Error(`Download failed with status code: ${downloadResult.statusCode}`);
+      throw new Error(
+        `Download failed with status code: ${downloadResult.statusCode}`
+      );
     }
   } catch (error) {
-    if (error instanceof Error) {
-      throw new Error(`Failed to download model: ${error.message}`);
-    } else {
-      throw new Error('Failed to download model: Unknown error');
-    }
+    console.error("Download error:", error);
+    throw new Error(
+      `Failed to download model: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
   }
 };
-
 
 // export const fetchAvailableFormats = async (repo: string): Promise<string[]> => {
 //     try {
 //       const response = await fetch(
 //         `https://huggingface.co/api/repos/${repo}/tree/main`
 //       );
-  
+
 //       if (!response.ok) {
 //         throw new Error(`Failed to fetch formats: ${response.statusText}`);
 //       }
-  
+
 //       const data = await response.json();
-  
+
 //       // Filter files for .gguf extensions
 //       return data
 //         .filter((file: any) => file.path.endsWith(".gguf"))
@@ -81,7 +91,7 @@ export const downloadModel = async (
 //   onProgress: (progress: number) => void
 // ): Promise<string> => {
 //   const destPath = `${RNFetchBlob.fs.dirs.DocumentDir}/${modelName}.gguf`;
-  
+
 //   try {
 //     const downloadResult = await RNFetchBlob.config({
 //       path: destPath,

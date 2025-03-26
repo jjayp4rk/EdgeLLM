@@ -20,7 +20,8 @@
     "react-native-markdown-display": "^7.0.2",
     "react-native-tts": "^4.1.1",
     "react-native-vector-icons": "^10.2.0",
-    "react-syntax-highlighter": "^15.6.1"
+    "react-syntax-highlighter": "^15.6.1",
+    "rive-react-native": "^9.2.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

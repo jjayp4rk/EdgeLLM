@@ -1,4 +1,5 @@
 import Tts from "react-native-tts";
+import { Platform } from "react-native";
 
 // Function to initialize Text-to-Speech (TTS) settings and listeners
 export const initializeTtsListeners = async () => {
@@ -18,17 +19,13 @@ export const initializeTtsListeners = async () => {
 
   // The following commented-out code can be used to list available voices and set a default voice
   const voices = await Tts.voices();
-  console.log(voices);
+
   Tts.setDefaultVoice("com.apple.voice.compact.en-US.Samantha");
 
-  // Set the default speaking rate. Lower values are slower, and higher values are faster
-  Tts.setDefaultRate(0.3, true);
+  Tts.setDefaultPitch(0.7);
 
   // Ignore the silent switch on the device, allowing TTS to play even if the device is set to silent
   Tts.setIgnoreSilentSwitch("ignore");
-
-  // Set the default pitch. Lower values result in a lower pitch, and higher values in a higher pitch
-  Tts.setDefaultPitch(0.7);
 
   // Set up listeners for various TTS events
 
@@ -68,6 +65,8 @@ export const playTTS = async (message: string) => {
       }
     }
   );
+
+  console.log("[TTS] Speaking message:", message);
 
   // Use TTS to speak the provided message
   Tts.speak(message);
