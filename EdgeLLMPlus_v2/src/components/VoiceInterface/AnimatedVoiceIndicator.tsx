@@ -7,18 +7,66 @@ const CIRCLE_SIZE = width * 0.6;
 interface Props {
   isListening: boolean;
   isProcessing: boolean;
+  isTtsPlaying: boolean;
 }
 
 export const AnimatedVoiceIndicator: React.FC<Props> = ({
   isListening,
   isProcessing,
+  isTtsPlaying,
 }) => {
   const scale = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(0.5)).current;
   const rotation = useRef(new Animated.Value(0)).current;
+  const waveScale = useRef(new Animated.Value(1)).current;
+  const waveOpacity = useRef(new Animated.Value(0.5)).current;
 
   useEffect(() => {
-    if (isListening) {
+    if (isTtsPlaying) {
+      // Wave animation for TTS
+      Animated.loop(
+        Animated.sequence([
+          Animated.parallel([
+            Animated.timing(waveScale, {
+              toValue: 1.3,
+              duration: 800,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(waveOpacity, {
+              toValue: 0.8,
+              duration: 800,
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.parallel([
+            Animated.timing(waveScale, {
+              toValue: 1,
+              duration: 800,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(waveOpacity, {
+              toValue: 0.5,
+              duration: 800,
+              useNativeDriver: true,
+            }),
+          ]),
+        ])
+      ).start();
+
+      // Set static scale and opacity for TTS
+      Animated.parallel([
+        Animated.spring(scale, {
+          toValue: 1.1,
+          useNativeDriver: true,
+        }),
+        Animated.spring(opacity, {
+          toValue: 0.7,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else if (isListening) {
       // Pulsing animation when listening
       Animated.loop(
         Animated.sequence([
@@ -88,9 +136,28 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
           duration: 300,
           useNativeDriver: true,
         }),
+        Animated.timing(waveScale, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(waveOpacity, {
+          toValue: 0.5,
+          duration: 300,
+          useNativeDriver: true,
+        }),
       ]).start();
     }
-  }, [isListening, isProcessing, scale, opacity, rotation]);
+  }, [
+    isListening,
+    isProcessing,
+    isTtsPlaying,
+    scale,
+    opacity,
+    rotation,
+    waveScale,
+    waveOpacity,
+  ]);
 
   const spin = rotation.interpolate({
     inputRange: [0, 1],
@@ -105,6 +172,7 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
           {
             transform: [{ scale }, { rotate: spin }],
             opacity,
+            backgroundColor: isTtsPlaying ? "#10B981" : "#6366f1",
           },
         ]}
       >
@@ -112,8 +180,8 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
           style={[
             styles.innerCircle,
             {
-              transform: [{ scale }],
-              opacity: Animated.multiply(opacity, 1.2),
+              transform: [{ scale: waveScale }],
+              opacity: waveOpacity,
             },
           ]}
         />
@@ -133,7 +201,6 @@ const styles = StyleSheet.create({
     width: CIRCLE_SIZE,
     height: CIRCLE_SIZE,
     borderRadius: CIRCLE_SIZE / 2,
-    backgroundColor: "#6366f1",
     justifyContent: "center",
     alignItems: "center",
   },

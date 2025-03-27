@@ -1,5 +1,6 @@
 import Tts from "react-native-tts";
 import { Platform } from "react-native";
+import { useVoiceStore } from "./store/voiceStore";
 
 // Function to initialize Text-to-Speech (TTS) settings and listeners
 export const initializeTtsListeners = async () => {
@@ -32,6 +33,7 @@ export const initializeTtsListeners = async () => {
   // Listener for when TTS starts speaking
   Tts.addEventListener("tts-start", (event) => {
     console.log("TTS Started: ", event);
+    useVoiceStore.getState().setIsTtsPlaying(true);
   });
 
   // Listener for TTS progress (triggered repeatedly while speaking)
@@ -42,11 +44,13 @@ export const initializeTtsListeners = async () => {
   // Listener for when TTS finishes speaking
   Tts.addEventListener("tts-finish", (event) => {
     console.log("TTS finished: ", event);
+    useVoiceStore.getState().setIsTtsPlaying(false);
   });
 
   // Listener for when TTS is canceled
   Tts.addEventListener("tts-cancel", (event) => {
     console.log("TTS Cancel: ", event);
+    useVoiceStore.getState().setIsTtsPlaying(false);
   });
 };
 

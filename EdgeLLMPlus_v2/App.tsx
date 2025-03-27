@@ -25,13 +25,11 @@ import { styles } from "./src/styles/AppStyles";
 import { Message, AppState } from "./src/types";
 import { INITIAL_CONVERSATION, MODEL_CONFIG, LLM_CONFIG } from "./src/config";
 import { AnimatedVoiceIndicator } from "./src/components/VoiceInterface/AnimatedVoiceIndicator";
+import { useVoiceStore } from "./src/store/voiceStore";
 
 function App(): React.JSX.Element {
   const [progress, setProgress] = useState<number>(0);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
-  const [isListening, setIsListening] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [currentSpeech, setCurrentSpeech] = useState("");
   const [messages, setMessages] = useState<Message[]>(INITIAL_CONVERSATION);
   const messagesRef = useRef<Message[]>(INITIAL_CONVERSATION);
   const [aiGenerating, setAiGenerating] = useState(false);
@@ -39,6 +37,19 @@ function App(): React.JSX.Element {
   const contextRef = useRef<any>(null);
   const [appState, setAppState] = useState<AppState>("welcome");
   const [downloadedModels, setDownloadedModels] = useState<string[]>([]);
+
+  // Use Zustand store for voice states
+  const {
+    isListening,
+    isProcessing,
+    isTtsPlaying,
+    currentSpeech,
+    setIsListening,
+    setIsProcessing,
+    setIsTtsPlaying,
+    setCurrentSpeech,
+    reset: resetVoiceState,
+  } = useVoiceStore();
 
   // Update refs when state changes
   useEffect(() => {
@@ -68,6 +79,7 @@ function App(): React.JSX.Element {
     return () => {
       console.log("[App] Cleaning up services");
       Voice.destroy().then(Voice.removeAllListeners);
+      resetVoiceState();
     };
   }, []); // Only run once on mount
 
@@ -101,7 +113,8 @@ function App(): React.JSX.Element {
       if (!exists) {
         console.log("[App] Starting model download from:", MODEL_CONFIG.URL);
         await downloadModel(MODEL_CONFIG.FILE, MODEL_CONFIG.URL, (progress) => {
-          setProgress(progress);
+          // Convert progress to decimal (0-1) if it's coming as percentage (0-100)
+          setProgress(progress / 100);
         });
       }
 
@@ -213,7 +226,7 @@ function App(): React.JSX.Element {
       ];
 
       setMessages(updatedMessages);
-      playTTS(currentResponse.trim());
+      await playTTS(currentResponse.trim());
     } catch (error) {
       console.error("[App] Error in handleSpeechResult:", error);
       if (
@@ -286,7 +299,7 @@ function App(): React.JSX.Element {
         "Failed to start voice recognition. Please try again."
       );
     }
-  }, []);
+  }, [setIsListening, setIsProcessing]);
 
   const stopListening = useCallback(async () => {
     try {
@@ -298,7 +311,7 @@ function App(): React.JSX.Element {
       setIsListening(false);
       setIsProcessing(false);
     }
-  }, []);
+  }, [setIsListening, setIsProcessing]);
 
   const handleMicPress = async () => {
     console.log("[App] Mic button pressed, current state:", {
@@ -306,6 +319,7 @@ function App(): React.JSX.Element {
       isProcessing,
       appState,
       hasContext: !!context,
+      isTtsPlaying,
     });
 
     if (!context) {
@@ -322,7 +336,7 @@ function App(): React.JSX.Element {
     if (isListening) {
       console.log("[App] Stopping voice recognition");
       await stopListening();
-    } else if (!isProcessing) {
+    } else if (!isProcessing && !isTtsPlaying) {
       console.log("[App] Starting voice recognition");
       await startListening();
     }
@@ -406,10 +420,18 @@ function App(): React.JSX.Element {
   const renderVoiceAssistant = () => (
     <View style={styles.container}>
       <TouchableOpacity
-        style={styles.settingsButton}
+        style={[
+          styles.settingsButton,
+          isTtsPlaying && styles.settingsButtonDisabled,
+        ]}
         onPress={handleSettingsPress}
+        disabled={isTtsPlaying}
       >
-        <MaterialCommunityIcons name="cog" size={24} color="#666666" />
+        <MaterialCommunityIcons
+          name="cog"
+          size={24}
+          color={isTtsPlaying ? "#999999" : "#666666"}
+        />
       </TouchableOpacity>
 
       <View style={styles.contentContainer}>
@@ -419,23 +441,28 @@ function App(): React.JSX.Element {
           <AnimatedVoiceIndicator
             isListening={isListening}
             isProcessing={isProcessing}
+            isTtsPlaying={isTtsPlaying}
           />
 
           <TouchableOpacity
             style={[
               styles.micButton,
               isListening && styles.micButtonActive,
-              isProcessing && styles.micButtonDisabled,
+              (isProcessing || isTtsPlaying) && styles.micButtonDisabled,
             ]}
             onPress={handleMicPress}
-            disabled={isProcessing || aiGenerating}
+            disabled={isProcessing || aiGenerating || isTtsPlaying}
             activeOpacity={0.7}
           >
             <MaterialCommunityIcons
               name={isListening ? "stop" : "microphone"}
               size={32}
               color={
-                isProcessing ? "#999999" : isListening ? "#FFFFFF" : "#000000"
+                isProcessing || isTtsPlaying
+                  ? "#999999"
+                  : isListening
+                  ? "#FFFFFF"
+                  : "#000000"
               }
             />
           </TouchableOpacity>
@@ -445,6 +472,8 @@ function App(): React.JSX.Element {
               ? "Listening..."
               : isProcessing
               ? "Processing..."
+              : isTtsPlaying
+              ? "Speaking..."
               : "Tap to start talking"}
           </Text>
         </View>
