@@ -8,11 +8,11 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { initLlama, releaseAllLlama } from "llama.rn";
 import { downloadModel } from "./src/api/model";
 import ProgressBar from "./src/components/ProgressBar";
-import axios from "axios";
 import { initializeTtsListeners, playTTS } from "./src/ttsListeners";
 import { WaveformAvatar } from "./src/components/VoiceInterface/MemojiAvatar";
 import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
@@ -22,173 +22,29 @@ import Voice, {
 } from "@react-native-voice/voice";
 import RNFS from "react-native-fs";
 import { styles } from "./src/styles/AppStyles";
-
-interface Message {
-  role: "system" | "user" | "assistant";
-  content: string;
-  thought?: string;
-  showThought?: boolean;
-}
-
-const SYSTEM_PROMPT =
-  "You are a friendly AI teacher. Be short and concise in your responses, you're to help answer questions! Explain things in a way that is easy to understand.";
-
-const INITIAL_CONVERSATION: Message[] = [
-  {
-    role: "system",
-    content: SYSTEM_PROMPT,
-  },
-];
+import { Message, AppState } from "./src/types";
+import { INITIAL_CONVERSATION, MODEL_CONFIG, LLM_CONFIG } from "./src/config";
+import { AnimatedVoiceIndicator } from "./src/components/VoiceInterface/AnimatedVoiceIndicator";
 
 function App(): React.JSX.Element {
   const [progress, setProgress] = useState<number>(0);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
-  const [selectedModelFormat, setSelectedModelFormat] = useState<string>("");
-  const [selectedGGUF, setSelectedGGUF] = useState<string>("");
-  const [availableGGUFs, setAvailableGGUFs] = useState<string[]>([]);
-  const [currentPage, setCurrentPage] = useState<
-    "model-selection" | "conversation"
-  >("model-selection");
-  const [downloadedModels, setDownloadedModels] = useState<string[]>([]);
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentSpeech, setCurrentSpeech] = useState("");
   const [messages, setMessages] = useState<Message[]>(INITIAL_CONVERSATION);
+  const messagesRef = useRef<Message[]>(INITIAL_CONVERSATION);
+  const [aiGenerating, setAiGenerating] = useState(false);
   const [context, setContext] = useState<any>(null);
-  const [tokensPerSecond, setTokensPerSecond] = useState<number[]>([]);
-  const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const contextRef = useRef<any>(null);
+  const [appState, setAppState] = useState<AppState>("welcome");
+  const [downloadedModels, setDownloadedModels] = useState<string[]>([]);
 
-  const modelFormats = [
-    { label: "Llama-3.2-1B-Instruct" },
-    { label: "Qwen2-0.5B-Instruct" },
-    { label: "DeepSeek-R1-Distill-Qwen-1.5B" },
-    { label: "SmolLM2-1.7B-Instruct" },
-  ];
-
-  const HF_TO_GGUF = {
-    "Llama-3.2-1B-Instruct": "medmekk/Llama-3.2-1B-Instruct.GGUF",
-    "DeepSeek-R1-Distill-Qwen-1.5B":
-      "medmekk/DeepSeek-R1-Distill-Qwen-1.5B.GGUF",
-    "Qwen2-0.5B-Instruct": "medmekk/Qwen2.5-0.5B-Instruct.GGUF",
-    "SmolLM2-1.7B-Instruct": "medmekk/SmolLM2-1.7B-Instruct.GGUF",
-  };
-
-  const handleModelSelect = async (file: string) => {
-    try {
-      setIsDownloading(true);
-      setProgress(0);
-      const destPath = `${RNFS.DocumentDirectoryPath}/${file}`;
-
-      // Check if file already exists
-      const exists = await RNFS.exists(destPath);
-      if (!exists) {
-        // Download the model
-        const repoPath =
-          HF_TO_GGUF[selectedModelFormat as keyof typeof HF_TO_GGUF];
-        const downloadUrl = `https://huggingface.co/${repoPath}/resolve/main/${file}`;
-        console.log("[App] Downloading from:", downloadUrl);
-        await downloadModel(file, downloadUrl, (progress) => {
-          setProgress(progress);
-        });
-      }
-
-      // Clean up previous model context
-      if (context) {
-        console.log("[App] Releasing previous model context");
-        await releaseAllLlama();
-        setContext(null);
-        setMessages(INITIAL_CONVERSATION);
-      }
-
-      // Initialize the new model
-      console.log("[App] Initializing new model from:", destPath);
-      const newContext = await initLlama({
-        model: destPath,
-        use_mlock: true,
-        n_ctx: 2048,
-        n_gpu_layers: 1,
-      });
-
-      // Set the new context
-      setContext(newContext);
-      console.log(
-        "[App] Model initialized successfully, context set:",
-        !!newContext
-      );
-
-      // Update downloaded models list
-      const files = await RNFS.readDir(RNFS.DocumentDirectoryPath);
-      const ggufFiles = files
-        .filter((file) => file.name.endsWith(".gguf"))
-        .map((file) => file.name);
-      setDownloadedModels(ggufFiles);
-
-      setSelectedGGUF(file);
-      setCurrentPage("conversation");
-    } catch (error) {
-      console.error("[App] Error loading model:", error);
-      Alert.alert("Error", "Failed to load the model. Please try again.");
-    } finally {
-      setIsDownloading(false);
-      setProgress(0);
-    }
-  };
-
-  const handleBackToModelSelection = async () => {
-    if (context) {
-      console.log("[App] Releasing context before navigation");
-      await releaseAllLlama();
-      setContext(null);
-      setMessages(INITIAL_CONVERSATION);
-    }
-    setCurrentPage("model-selection");
-  };
-
-  const handleFormatSelection = (format: string) => {
-    setSelectedModelFormat(format);
-    setAvailableGGUFs([]);
-    fetchAvailableGGUFs(format);
-  };
-
-  const fetchAvailableGGUFs = async (modelFormat: string) => {
-    if (!modelFormat) {
-      Alert.alert("Error", "Please select a model format first.");
-      return;
-    }
-
-    try {
-      const repoPath = HF_TO_GGUF[modelFormat as keyof typeof HF_TO_GGUF];
-      if (!repoPath) {
-        throw new Error(
-          `No repository mapping found for model format: ${modelFormat}`
-        );
-      }
-
-      console.log("Fetching models from:", repoPath);
-      const response = await axios.get(
-        `https://huggingface.co/api/models/${repoPath}`
-      );
-
-      if (!response.data?.siblings) {
-        throw new Error("Invalid API response format");
-      }
-
-      const files = response.data.siblings
-        .filter((file: any) => file.rfilename.endsWith(".gguf"))
-        .map((file: any) => file.rfilename);
-
-      console.log("Found GGUF files:", files);
-      setAvailableGGUFs(files);
-    } catch (error) {
-      console.error("Error fetching GGUFs:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to fetch model files";
-      Alert.alert("Error", errorMessage);
-      setAvailableGGUFs([]);
-    }
-  };
+  // Update refs when state changes
+  useEffect(() => {
+    contextRef.current = context;
+    messagesRef.current = messages;
+  }, [context, messages]);
 
   // Initialize voice and TTS services
   useEffect(() => {
@@ -196,8 +52,6 @@ function App(): React.JSX.Element {
       try {
         console.log("[App] Initializing services");
         await initializeTtsListeners();
-        await Voice.destroy();
-        await Voice.removeAllListeners();
         const isAvailable = await Voice.isAvailable();
         if (!isAvailable) {
           throw new Error("Voice recognition is not available");
@@ -214,115 +68,105 @@ function App(): React.JSX.Element {
     return () => {
       console.log("[App] Cleaning up services");
       Voice.destroy().then(Voice.removeAllListeners);
-      if (context) {
-        console.log("[App] Releasing context on unmount");
-        releaseAllLlama();
-        setContext(null);
+    };
+  }, []); // Only run once on mount
+
+  // Check for downloaded models on mount
+  useEffect(() => {
+    const checkDownloadedModels = async () => {
+      try {
+        const files = await RNFS.readDir(RNFS.DocumentDirectoryPath);
+        const ggufFiles = files
+          .filter((file) => file.name.endsWith(".gguf"))
+          .map((file) => file.name);
+        setDownloadedModels(ggufFiles);
+      } catch (error) {
+        console.error("[App] Error checking downloaded models:", error);
       }
     };
+
+    checkDownloadedModels();
   }, []);
 
-  // Add effect to monitor context state
-  useEffect(() => {
-    console.log("[App] Context state changed:", !!context);
-  }, [context]);
+  const handleGetStarted = async () => {
+    try {
+      setAppState("downloading");
+      setIsDownloading(true);
+      setProgress(0);
+      const destPath = `${RNFS.DocumentDirectoryPath}/${MODEL_CONFIG.FILE}`;
 
-  const setupVoiceListeners = () => {
-    console.log("[App] Setting up voice listeners");
-    let finalSpeech = "";
+      // Check if file already exists
+      const exists = await RNFS.exists(destPath);
 
-    Voice.onSpeechStart = () => {
-      console.log("[App] Speech started");
-      setIsListening(true);
-      finalSpeech = "";
-      setCurrentSpeech("");
-    };
-
-    Voice.onSpeechEnd = () => {
-      console.log("[App] Speech ended");
-      setIsListening(false);
-      if (finalSpeech) {
-        console.log("[App] Processing final speech:", finalSpeech);
-        handleSpeechResult(finalSpeech);
-      } else {
-        console.log("[App] No speech detected, ignoring");
+      if (!exists) {
+        console.log("[App] Starting model download from:", MODEL_CONFIG.URL);
+        await downloadModel(MODEL_CONFIG.FILE, MODEL_CONFIG.URL, (progress) => {
+          setProgress(progress);
+        });
       }
-    };
 
-    Voice.onSpeechResults = (e: SpeechResultsEvent) => {
-      if (e.value) {
-        const text = e.value[0];
-        console.log("[App] Speech result:", text);
-        finalSpeech = text; // Store the latest result
-        setCurrentSpeech(text);
+      if (context) {
+        await releaseAllLlama();
+        setContext(null);
+        setMessages(INITIAL_CONVERSATION);
       }
-    };
+      // Initialize the model
+      console.log("[App] Initializing model from:", destPath);
+      const newContext = await initLlama({
+        model: destPath,
+        use_mlock: true,
+        n_ctx: 2048,
+        n_gpu_layers: 1,
+      });
 
-    Voice.onSpeechError = (e: SpeechErrorEvent) => {
-      console.error("[App] Speech error:", e);
-      setIsListening(false);
-      setIsProcessing(false);
-      finalSpeech = "";
-      setCurrentSpeech("");
-    };
-
-    console.log("[App] Voice listeners setup complete");
+      setContext(newContext);
+      console.log("[App] Model initialized successfully");
+      setAppState("ready");
+    } catch (error) {
+      console.error("[App] Error initializing model:", error);
+      Alert.alert("Error", "Failed to initialize the model. Please try again.");
+      setAppState("welcome");
+    } finally {
+      setIsDownloading(false);
+      setProgress(0);
+    }
   };
 
   const handleSpeechResult = async (text: string) => {
-    console.log("[App] Handling speech result:", text);
-    console.log("[App] Current context state:", !!context);
-
     if (isProcessing) {
       console.log("[App] Already processing, ignoring speech result");
       return;
     }
 
-    try {
-      setIsProcessing(true);
-      console.log("[App] Processing speech:", text);
+    setIsProcessing(true);
+    setAiGenerating(true);
+    console.log("[App] Processing speech:", text);
 
-      // Add user message to history
+    try {
+      // Get current messages from ref to ensure we have latest state
+      const currentMessages = messagesRef.current;
       const newMessages: Message[] = [
-        ...messages,
+        ...currentMessages,
         { role: "user" as const, content: text },
       ];
-      console.log("[App] Updated messages with user input:", newMessages);
+
+      // Update messages state once
       setMessages(newMessages);
 
-      // Generate response using the LLM service
-      if (!context) {
-        console.error("[App] No LLM context available");
-        throw new Error("No LLM context available");
-      }
-
-      console.log("[App] Starting LLM generation with context:", !!context);
       let currentResponse = "";
       let currentThought = "";
       let inThinkBlock = false;
 
-      const result = await context.completion(
+      if (!contextRef.current) {
+        throw new Error("No LLM context available");
+      }
+
+      console.log("[App] Using context:", contextRef.current);
+
+      await contextRef.current.completion(
         {
           messages: newMessages,
-          n_predict: 400,
-          stop: [
-            "</s>",
-            "<|end|>",
-            "user:",
-            "assistant:",
-            "<|im_end|>",
-            "<|eot_id|>",
-            "<|end▁of▁sentence|>",
-            "<|end_of_text|>",
-            "REDACTED_SPECIAL_TOKEN",
-          ],
-          temperature: 0.8,
-          repeat_penalty: 1.2,
-          top_k: 40,
-          top_p: 0.9,
-          n_ctx: 2048,
-          presence_penalty: 0.6,
-          frequency_penalty: 0.6,
+          ...LLM_CONFIG,
         },
         (data: { token: string }) => {
           if (data?.token) {
@@ -357,192 +201,268 @@ function App(): React.JSX.Element {
         }
       );
 
-      console.log("[App] AI response:", currentResponse);
-
       if (!currentResponse) {
         console.error("[App] No response generated from LLM");
         return;
       }
 
-      // Add AI response to history
+      // Add AI response to history using the latest messages
       const updatedMessages: Message[] = [
-        ...newMessages,
+        ...messagesRef.current,
         { role: "assistant" as const, content: currentResponse.trim() },
       ];
-      console.log("[App] Updated messages with AI response:", updatedMessages);
-      setMessages(updatedMessages);
 
-      // Play the response using TTS
-      console.log("[App] Playing TTS response");
-      try {
-        await playTTS(currentResponse.trim());
-        console.log("[App] TTS playback complete");
-      } catch (error) {
-        console.error("[App] TTS playback failed:", error);
-      }
+      setMessages(updatedMessages);
+      playTTS(currentResponse.trim());
     } catch (error) {
       console.error("[App] Error in handleSpeechResult:", error);
+      if (
+        error instanceof Error &&
+        error.message === "No LLM context available"
+      ) {
+        Alert.alert("Error", "AI model context was lost. Please try again.");
+        setAppState("welcome");
+      }
     } finally {
       setIsProcessing(false);
       setCurrentSpeech("");
-      console.log("[App] Processing complete, mic enabled");
+      setAiGenerating(false);
     }
   };
 
-  const startListening = useCallback(async () => {
-    if (isProcessing) {
-      console.log("[App] Cannot start listening while processing");
-      return;
-    }
+  const setupVoiceListeners = () => {
+    console.log("[App] Setting up voice listeners");
+    let finalSpeech = "";
 
-    if (!context) {
-      console.error("[App] Cannot start listening - no LLM context available");
-      Alert.alert("Error", "Please select a model first");
-      return;
-    }
+    Voice.onSpeechStart = () => {
+      console.log("[App] Speech started");
+      setIsListening(true);
+      finalSpeech = "";
+      setCurrentSpeech("");
+    };
 
-    try {
-      console.log("[App] Starting listening...");
-      await Voice.destroy();
-      await Voice.removeAllListeners();
-      setupVoiceListeners();
-      await Voice.start("en-US");
-      console.log("[App] Voice.start() successful");
-    } catch (error) {
-      console.error("[App] Failed to start listening:", error);
+    Voice.onSpeechEnd = async () => {
+      console.log("[App] Speech ended");
+      setIsListening(false);
+
+      if (finalSpeech) {
+        console.log("[App] Processing final speech:", finalSpeech);
+        await handleSpeechResult(finalSpeech);
+      } else {
+        console.log("[App] No speech detected, ignoring");
+      }
+    };
+
+    Voice.onSpeechResults = (e: SpeechResultsEvent) => {
+      if (e.value && e.value[0]) {
+        const text = e.value[0];
+        console.log("[App] Speech result:", text);
+        finalSpeech = text; // Store the latest result
+        setCurrentSpeech(text);
+      }
+    };
+
+    Voice.onSpeechError = (e: SpeechErrorEvent) => {
+      console.error("[App] Speech error:", e);
       setIsListening(false);
       setIsProcessing(false);
+      finalSpeech = "";
+      setCurrentSpeech("");
+      Alert.alert("Error", "Voice recognition failed. Please try again.");
+    };
+  };
+
+  const startListening = useCallback(async () => {
+    try {
+      console.log("[App] Starting voice recognition");
+      await Voice.start("en-US");
+      setIsListening(true);
+    } catch (error) {
+      console.error("[App] Error starting voice recognition:", error);
+      setIsListening(false);
+      setIsProcessing(false);
+      Alert.alert(
+        "Error",
+        "Failed to start voice recognition. Please try again."
+      );
     }
-  }, [isProcessing, context]);
+  }, []);
 
   const stopListening = useCallback(async () => {
     try {
-      console.log("[App] Stopping listening...");
+      console.log("[App] Stopping voice recognition");
       await Voice.stop();
-      console.log("[App] Voice.stop() successful");
+      setIsListening(false);
     } catch (error) {
-      console.error("[App] Failed to stop listening:", error);
+      console.error("[App] Error stopping voice recognition:", error);
       setIsListening(false);
       setIsProcessing(false);
     }
   }, []);
 
-  const handleMicPress = () => {
+  const handleMicPress = async () => {
+    console.log("[App] Mic button pressed, current state:", {
+      isListening,
+      isProcessing,
+      appState,
+      hasContext: !!context,
+    });
+
+    if (!context) {
+      console.log(
+        "[App] No LLM context available - need to initialize model first"
+      );
+      Alert.alert(
+        "Not Ready",
+        "Please wait for the AI model to initialize. Go back to the welcome screen and click 'Start Chatting'."
+      );
+      return;
+    }
+
     if (isListening) {
-      console.log("[App] Stopping recording...");
-      stopListening();
+      console.log("[App] Stopping voice recognition");
+      await stopListening();
     } else if (!isProcessing) {
-      console.log("[App] Starting recording...");
-      startListening();
-    } else {
-      console.log("[App] Mic press ignored - still processing");
+      console.log("[App] Starting voice recognition");
+      await startListening();
     }
   };
+
+  const handleSettingsPress = useCallback(() => {
+    if (isListening) {
+      stopListening();
+    }
+    // Don't change app state if we have context, just reset messages
+    if (context) {
+      setMessages(INITIAL_CONVERSATION);
+      setAppState("ready");
+    } else {
+      setAppState("welcome");
+    }
+  }, [isListening, stopListening, context]);
+
+  const renderWelcomeScreen = () => (
+    <View style={styles.container}>
+      <View style={styles.welcomeCard}>
+        <MaterialCommunityIcons name="robot-happy" size={60} color="#6366f1" />
+        <Text style={styles.welcomeTitle}>Welcome to EdgeLLM</Text>
+        <Text style={styles.welcomeSubtitle}>
+          Your friendly AI assistant that runs completely offline
+        </Text>
+
+        <View style={styles.welcomeFeatures}>
+          <View style={styles.featureItem}>
+            <MaterialCommunityIcons
+              name="shield-check"
+              size={24}
+              color="#6366f1"
+            />
+            <Text style={styles.featureText}>
+              100% Private - Everything stays on your device
+            </Text>
+          </View>
+          <View style={styles.featureItem}>
+            <MaterialCommunityIcons name="brain" size={24} color="#6366f1" />
+            <Text style={styles.featureText}>
+              Powered by advanced AI technology
+            </Text>
+          </View>
+          <View style={styles.featureItem}>
+            <MaterialCommunityIcons
+              name="microphone"
+              size={24}
+              color="#6366f1"
+            />
+            <Text style={styles.featureText}>
+              Just tap and talk - Natural voice conversations
+            </Text>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={styles.getStartedButton}
+          onPress={handleGetStarted}
+        >
+          <Text style={styles.getStartedButtonText}>Start Chatting</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderDownloadScreen = () => (
+    <View style={[styles.card, styles.downloadCard]}>
+      <MaterialCommunityIcons name="download" size={80} color="#007AFF" />
+      <Text style={styles.downloadTitle}>Preparing Your AI Assistant</Text>
+      <Text style={styles.downloadSubtitle}>
+        This only happens once. We're downloading the AI model to your device.
+      </Text>
+      <View style={styles.progressContainer}>
+        <ProgressBar progress={progress} />
+        <Text style={styles.progressText}>{Math.round(progress * 100)}%</Text>
+      </View>
+    </View>
+  );
+
+  const renderVoiceAssistant = () => (
+    <View style={styles.container}>
+      <TouchableOpacity
+        style={styles.settingsButton}
+        onPress={handleSettingsPress}
+      >
+        <MaterialCommunityIcons name="cog" size={24} color="#666666" />
+      </TouchableOpacity>
+
+      <View style={styles.contentContainer}>
+        <Text style={styles.assistantTitle}>How can I help you today?</Text>
+
+        <View style={styles.voiceContainer}>
+          <AnimatedVoiceIndicator
+            isListening={isListening}
+            isProcessing={isProcessing}
+          />
+
+          <TouchableOpacity
+            style={[
+              styles.micButton,
+              isListening && styles.micButtonActive,
+              isProcessing && styles.micButtonDisabled,
+            ]}
+            onPress={handleMicPress}
+            disabled={isProcessing || aiGenerating}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name={isListening ? "stop" : "microphone"}
+              size={32}
+              color={
+                isProcessing ? "#999999" : isListening ? "#FFFFFF" : "#000000"
+              }
+            />
+          </TouchableOpacity>
+
+          <Text style={styles.micInstructions}>
+            {isListening
+              ? "Listening..."
+              : isProcessing
+              ? "Processing..."
+              : "Tap to start talking"}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  console.log("Messages", messages);
 
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.container}
       >
-        <ScrollView
-          style={styles.scrollView}
-          ref={scrollViewRef}
-          onScroll={(event) => {
-            const currentPosition = event.nativeEvent.contentOffset.y;
-            const contentHeight = event.nativeEvent.contentSize.height;
-            const scrollViewHeight = event.nativeEvent.layoutMeasurement.height;
-            const distanceFromBottom =
-              contentHeight - scrollViewHeight - currentPosition;
-            setAutoScrollEnabled(distanceFromBottom < 100);
-          }}
-          scrollEventThrottle={16}
-        >
-          {currentPage === "model-selection" && !isDownloading && (
-            <View style={styles.card}>
-              <Text style={styles.subtitle}>Choose a model format</Text>
-              {modelFormats.map((format) => (
-                <TouchableOpacity
-                  key={format.label}
-                  style={[
-                    styles.button,
-                    selectedModelFormat === format.label &&
-                      styles.selectedButton,
-                  ]}
-                  onPress={() => handleFormatSelection(format.label)}
-                >
-                  <Text style={styles.buttonText}>{format.label}</Text>
-                </TouchableOpacity>
-              ))}
-              {selectedModelFormat && availableGGUFs.length > 0 && (
-                <>
-                  <Text style={styles.subtitle}>Available Models</Text>
-                  {availableGGUFs.map((file) => (
-                    <TouchableOpacity
-                      key={file}
-                      style={styles.button}
-                      onPress={() => handleModelSelect(file)}
-                    >
-                      <Text style={styles.buttonText}>{file}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </>
-              )}
-            </View>
-          )}
-          {currentPage === "conversation" && !isDownloading && (
-            <View style={styles.container}>
-              <TouchableOpacity
-                style={styles.backButton}
-                onPress={handleBackToModelSelection}
-              >
-                <MaterialCommunityIcons
-                  name="chevron-left"
-                  size={32}
-                  color="#000"
-                />
-              </TouchableOpacity>
-
-              <View style={styles.contentContainer}>
-                <View style={styles.waveformContainer}>
-                  <WaveformAvatar
-                    isSpeaking={isProcessing}
-                    isListening={isListening}
-                  />
-                </View>
-
-                <TouchableOpacity
-                  style={[
-                    styles.micButton,
-                    isListening && styles.micButtonActive,
-                    isProcessing && styles.micButtonDisabled,
-                  ]}
-                  onPress={handleMicPress}
-                  disabled={isProcessing}
-                >
-                  <MaterialCommunityIcons
-                    name={isListening ? "stop" : "microphone"}
-                    size={32}
-                    color={
-                      isProcessing
-                        ? "#A1A1AA"
-                        : isListening
-                        ? "#FFFFFF"
-                        : "#000000"
-                    }
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-          {isDownloading && (
-            <View style={styles.card}>
-              <Text style={styles.subtitle}>Downloading : </Text>
-              <Text style={styles.subtitle2}>{selectedGGUF}</Text>
-              <ProgressBar progress={progress} />
-            </View>
-          )}
-        </ScrollView>
+        {appState === "welcome" && renderWelcomeScreen()}
+        {appState === "downloading" && renderDownloadScreen()}
+        {appState === "ready" && renderVoiceAssistant()}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
