@@ -26,6 +26,7 @@ import { Message, AppState } from "./src/types";
 import { INITIAL_CONVERSATION, MODEL_CONFIG, LLM_CONFIG } from "./src/config";
 import { AnimatedVoiceIndicator } from "./src/components/VoiceInterface/AnimatedVoiceIndicator";
 import { useVoiceStore } from "./src/store/voiceStore";
+import { COLORS } from "./src/config/colors";
 
 function App(): React.JSX.Element {
   const [progress, setProgress] = useState<number>(0);
@@ -226,6 +227,9 @@ function App(): React.JSX.Element {
       ];
 
       setMessages(updatedMessages);
+
+      // Keep processing state active until TTS starts
+      // TTS listeners will handle setting isTtsPlaying to true
       await playTTS(currentResponse.trim());
     } catch (error) {
       console.error("[App] Error in handleSpeechResult:", error);
@@ -237,9 +241,8 @@ function App(): React.JSX.Element {
         setAppState("welcome");
       }
     } finally {
-      setIsProcessing(false);
+      // Only reset processing states after everything is complete
       setCurrentSpeech("");
-      setAiGenerating(false);
     }
   };
 
@@ -358,38 +361,38 @@ function App(): React.JSX.Element {
   const renderWelcomeScreen = () => (
     <View style={styles.container}>
       <View style={styles.welcomeCard}>
-        <MaterialCommunityIcons name="robot-happy" size={60} color="#6366f1" />
-        <Text style={styles.welcomeTitle}>Welcome to EdgeLLM</Text>
+        <Text style={styles.welcomeTitle}>Buddy</Text>
         <Text style={styles.welcomeSubtitle}>
-          Your friendly AI assistant that runs completely offline
+          Your friendly AI pal that's always here to help and chat
         </Text>
 
         <View style={styles.welcomeFeatures}>
           <View style={styles.featureItem}>
             <MaterialCommunityIcons
               name="shield-check"
-              size={24}
-              color="#6366f1"
+              size={28}
+              color={COLORS.primary}
+              style={styles.featureIcon}
             />
-            <Text style={styles.featureText}>
-              100% Private - Everything stays on your device
-            </Text>
+            <Text style={styles.featureText}>Safe & Private</Text>
           </View>
           <View style={styles.featureItem}>
-            <MaterialCommunityIcons name="brain" size={24} color="#6366f1" />
-            <Text style={styles.featureText}>
-              Powered by advanced AI technology
-            </Text>
+            <MaterialCommunityIcons
+              name="brain"
+              size={28}
+              color={COLORS.primary}
+              style={styles.featureIcon}
+            />
+            <Text style={styles.featureText}>Super Smart</Text>
           </View>
           <View style={styles.featureItem}>
             <MaterialCommunityIcons
               name="microphone"
-              size={24}
-              color="#6366f1"
+              size={28}
+              color={COLORS.primary}
+              style={styles.featureIcon}
             />
-            <Text style={styles.featureText}>
-              Just tap and talk - Natural voice conversations
-            </Text>
+            <Text style={styles.featureText}>Just Talk</Text>
           </View>
         </View>
 
@@ -405,7 +408,11 @@ function App(): React.JSX.Element {
 
   const renderDownloadScreen = () => (
     <View style={[styles.card, styles.downloadCard]}>
-      <MaterialCommunityIcons name="download" size={80} color="#007AFF" />
+      <MaterialCommunityIcons
+        name="download"
+        size={80}
+        color={COLORS.primary}
+      />
       <Text style={styles.downloadTitle}>Preparing Your AI Assistant</Text>
       <Text style={styles.downloadSubtitle}>
         This only happens once. We're downloading the AI model to your device.
@@ -430,7 +437,7 @@ function App(): React.JSX.Element {
         <MaterialCommunityIcons
           name="cog"
           size={24}
-          color={isTtsPlaying ? "#999999" : "#666666"}
+          color={isTtsPlaying ? COLORS.text.disabled : COLORS.text.secondary}
         />
       </TouchableOpacity>
 
@@ -456,18 +463,18 @@ function App(): React.JSX.Element {
           >
             <MaterialCommunityIcons
               name={isListening ? "stop" : "microphone"}
-              size={32}
+              size={28}
               color={
                 isProcessing || isTtsPlaying
-                  ? "#999999"
+                  ? COLORS.text.disabled
                   : isListening
-                  ? "#FFFFFF"
-                  : "#000000"
+                  ? COLORS.text.light
+                  : COLORS.text.primary
               }
             />
           </TouchableOpacity>
 
-          <Text style={styles.micInstructions}>
+          {/* <Text style={styles.micInstructions}>
             {isListening
               ? "Listening..."
               : isProcessing
@@ -475,7 +482,7 @@ function App(): React.JSX.Element {
               : isTtsPlaying
               ? "Speaking..."
               : "Tap to start talking"}
-          </Text>
+          </Text> */}
         </View>
       </View>
     </View>

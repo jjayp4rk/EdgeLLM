@@ -34,23 +34,29 @@ export const initializeTtsListeners = async () => {
   Tts.addEventListener("tts-start", (event) => {
     console.log("TTS Started: ", event);
     useVoiceStore.getState().setIsTtsPlaying(true);
+    useVoiceStore.getState().setTtsProgress(0);
   });
 
   // Listener for TTS progress (triggered repeatedly while speaking)
   Tts.addEventListener("tts-progress", (event) => {
-    // console.log('TTS progress: ', event) // Uncomment to log progress events
+    // const progress = event.percent / 100; // Convert to 0-1 range
+    // useVoiceStore.getState().setTtsProgress(progress);
   });
 
   // Listener for when TTS finishes speaking
   Tts.addEventListener("tts-finish", (event) => {
     console.log("TTS finished: ", event);
     useVoiceStore.getState().setIsTtsPlaying(false);
+    useVoiceStore.getState().setIsProcessing(false);
+    useVoiceStore.getState().setTtsProgress(1);
   });
 
   // Listener for when TTS is canceled
   Tts.addEventListener("tts-cancel", (event) => {
     console.log("TTS Cancel: ", event);
     useVoiceStore.getState().setIsTtsPlaying(false);
+    useVoiceStore.getState().setIsProcessing(false);
+    useVoiceStore.getState().setTtsProgress(0);
   });
 };
 

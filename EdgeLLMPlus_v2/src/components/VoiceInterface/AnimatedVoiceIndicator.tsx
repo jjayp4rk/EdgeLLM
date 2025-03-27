@@ -1,8 +1,11 @@
 import React, { useEffect, useRef } from "react";
 import { View, StyleSheet, Dimensions, Animated, Easing } from "react-native";
+import { useVoiceStore } from "../../store/voiceStore";
+import { COLORS } from "../../config/colors";
 
 const { width } = Dimensions.get("window");
-const CIRCLE_SIZE = width * 0.6;
+const CIRCLE_SIZE = width * 0.5;
+const WAVE_COUNT = 8; // Number of wave segments
 
 interface Props {
   isListening: boolean;
@@ -15,45 +18,61 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
   isProcessing,
   isTtsPlaying,
 }) => {
+  const { ttsProgress } = useVoiceStore();
   const scale = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(0.5)).current;
   const rotation = useRef(new Animated.Value(0)).current;
-  const waveScale = useRef(new Animated.Value(1)).current;
-  const waveOpacity = useRef(new Animated.Value(0.5)).current;
+  const waveScales = useRef(
+    Array(WAVE_COUNT)
+      .fill(0)
+      .map(() => new Animated.Value(1))
+  ).current;
+  const waveOpacities = useRef(
+    Array(WAVE_COUNT)
+      .fill(0)
+      .map(() => new Animated.Value(0.5))
+  ).current;
 
   useEffect(() => {
     if (isTtsPlaying) {
-      // Wave animation for TTS
-      Animated.loop(
-        Animated.sequence([
-          Animated.parallel([
-            Animated.timing(waveScale, {
-              toValue: 1.3,
-              duration: 800,
-              easing: Easing.inOut(Easing.ease),
-              useNativeDriver: true,
-            }),
-            Animated.timing(waveOpacity, {
-              toValue: 0.8,
-              duration: 800,
-              useNativeDriver: true,
-            }),
-          ]),
-          Animated.parallel([
-            Animated.timing(waveScale, {
-              toValue: 1,
-              duration: 800,
-              easing: Easing.inOut(Easing.ease),
-              useNativeDriver: true,
-            }),
-            Animated.timing(waveOpacity, {
-              toValue: 0.5,
-              duration: 800,
-              useNativeDriver: true,
-            }),
-          ]),
-        ])
-      ).start();
+      // Create a wave animation for TTS
+      const animations = waveScales.map((waveScale, index) => {
+        const delay = index * 100; // Stagger the waves
+        return Animated.loop(
+          Animated.sequence([
+            Animated.delay(delay),
+            Animated.parallel([
+              Animated.timing(waveScale, {
+                toValue: 1.3,
+                duration: 800,
+                easing: Easing.inOut(Easing.ease),
+                useNativeDriver: true,
+              }),
+              Animated.timing(waveOpacities[index], {
+                toValue: 0.8,
+                duration: 800,
+                useNativeDriver: true,
+              }),
+            ]),
+            Animated.parallel([
+              Animated.timing(waveScale, {
+                toValue: 1,
+                duration: 800,
+                easing: Easing.inOut(Easing.ease),
+                useNativeDriver: true,
+              }),
+              Animated.timing(waveOpacities[index], {
+                toValue: 0.5,
+                duration: 800,
+                useNativeDriver: true,
+              }),
+            ]),
+          ])
+        );
+      });
+
+      // Start all wave animations
+      animations.forEach((animation) => animation.start());
 
       // Set static scale and opacity for TTS
       Animated.parallel([
@@ -66,19 +85,23 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
           useNativeDriver: true,
         }),
       ]).start();
+
+      return () => {
+        animations.forEach((animation) => animation.stop());
+      };
     } else if (isListening) {
       // Pulsing animation when listening
       Animated.loop(
         Animated.sequence([
           Animated.parallel([
             Animated.timing(scale, {
-              toValue: 1.2,
+              toValue: 1.1,
               duration: 1000,
               easing: Easing.inOut(Easing.ease),
               useNativeDriver: true,
             }),
             Animated.timing(opacity, {
-              toValue: 0.8,
+              toValue: 0.7,
               duration: 1000,
               useNativeDriver: true,
             }),
@@ -91,7 +114,7 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
               useNativeDriver: true,
             }),
             Animated.timing(opacity, {
-              toValue: 0.4,
+              toValue: 0.5,
               duration: 1000,
               useNativeDriver: true,
             }),
@@ -136,16 +159,20 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
           duration: 300,
           useNativeDriver: true,
         }),
-        Animated.timing(waveScale, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(waveOpacity, {
-          toValue: 0.5,
-          duration: 300,
-          useNativeDriver: true,
-        }),
+        ...waveScales.map((waveScale) =>
+          Animated.timing(waveScale, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          })
+        ),
+        ...waveOpacities.map((waveOpacity) =>
+          Animated.timing(waveOpacity, {
+            toValue: 0.5,
+            duration: 300,
+            useNativeDriver: true,
+          })
+        ),
       ]).start();
     }
   }, [
@@ -155,8 +182,8 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
     scale,
     opacity,
     rotation,
-    waveScale,
-    waveOpacity,
+    waveScales,
+    waveOpacities,
   ]);
 
   const spin = rotation.interpolate({
@@ -172,16 +199,50 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
           {
             transform: [{ scale }, { rotate: spin }],
             opacity,
-            backgroundColor: isTtsPlaying ? "#10B981" : "#6366f1",
+            backgroundColor: isTtsPlaying
+              ? COLORS.accent
+              : isListening
+              ? COLORS.secondary
+              : isProcessing
+              ? COLORS.highlight
+              : COLORS.primary,
           },
         ]}
       >
-        <Animated.View
+        {waveScales.map((waveScale, index) => (
+          <Animated.View
+            key={index}
+            style={[
+              styles.waveSegment,
+              {
+                transform: [
+                  { scale: waveScale },
+                  { rotate: `${(index * 360) / WAVE_COUNT}deg` },
+                ],
+                opacity: waveOpacities[index],
+                borderColor: isTtsPlaying
+                  ? COLORS.accent
+                  : isListening
+                  ? COLORS.secondary
+                  : isProcessing
+                  ? COLORS.highlight
+                  : COLORS.primary,
+              },
+            ]}
+          />
+        ))}
+        <View
           style={[
             styles.innerCircle,
             {
-              transform: [{ scale: waveScale }],
-              opacity: waveOpacity,
+              backgroundColor: isTtsPlaying
+                ? COLORS.accent
+                : isListening
+                ? COLORS.secondary
+                : isProcessing
+                ? COLORS.highlight
+                : COLORS.primary,
+              opacity: 0.8,
             },
           ]}
         />
@@ -203,11 +264,28 @@ const styles = StyleSheet.create({
     borderRadius: CIRCLE_SIZE / 2,
     justifyContent: "center",
     alignItems: "center",
+    position: "relative",
+    shadowColor: COLORS.primary,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
   innerCircle: {
     width: CIRCLE_SIZE * 0.7,
     height: CIRCLE_SIZE * 0.7,
     borderRadius: (CIRCLE_SIZE * 0.7) / 2,
-    backgroundColor: "#818cf8",
+    position: "absolute",
+  },
+  waveSegment: {
+    position: "absolute",
+    width: CIRCLE_SIZE * 0.8,
+    height: CIRCLE_SIZE * 0.8,
+    borderRadius: CIRCLE_SIZE / 2,
+    borderWidth: 2,
+    backgroundColor: "transparent",
   },
 });
