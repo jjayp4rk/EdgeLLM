@@ -11,12 +11,16 @@ interface Props {
   isListening: boolean;
   isProcessing: boolean;
   isTtsPlaying: boolean;
+  size?: number; // Optional size multiplier (default: 0.5)
+  speed?: number; // Optional animation speed multiplier (default: 1.0)
 }
 
 export const AnimatedVoiceIndicator: React.FC<Props> = ({
   isListening,
   isProcessing,
   isTtsPlaying,
+  size = 0.5,
+  speed = 1.0,
 }) => {
   const { ttsProgress } = useVoiceStore();
   const scale = useRef(new Animated.Value(1)).current;
@@ -33,37 +37,40 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
       .map(() => new Animated.Value(0.5))
   ).current;
 
+  // Calculate actual duration based on speed
+  const getDuration = (baseDuration: number) => baseDuration / speed;
+
   useEffect(() => {
     if (isTtsPlaying) {
       // Create a wave animation for TTS
       const animations = waveScales.map((waveScale, index) => {
-        const delay = index * 100; // Stagger the waves
+        const delay = (index * 100) / speed;
         return Animated.loop(
           Animated.sequence([
             Animated.delay(delay),
             Animated.parallel([
               Animated.timing(waveScale, {
                 toValue: 1.3,
-                duration: 800,
+                duration: getDuration(800),
                 easing: Easing.inOut(Easing.ease),
                 useNativeDriver: true,
               }),
               Animated.timing(waveOpacities[index], {
                 toValue: 0.8,
-                duration: 800,
+                duration: getDuration(800),
                 useNativeDriver: true,
               }),
             ]),
             Animated.parallel([
               Animated.timing(waveScale, {
                 toValue: 1,
-                duration: 800,
+                duration: getDuration(800),
                 easing: Easing.inOut(Easing.ease),
                 useNativeDriver: true,
               }),
               Animated.timing(waveOpacities[index], {
                 toValue: 0.5,
-                duration: 800,
+                duration: getDuration(800),
                 useNativeDriver: true,
               }),
             ]),
@@ -96,26 +103,26 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
           Animated.parallel([
             Animated.timing(scale, {
               toValue: 1.1,
-              duration: 1000,
+              duration: getDuration(1000),
               easing: Easing.inOut(Easing.ease),
               useNativeDriver: true,
             }),
             Animated.timing(opacity, {
               toValue: 0.7,
-              duration: 1000,
+              duration: getDuration(1000),
               useNativeDriver: true,
             }),
           ]),
           Animated.parallel([
             Animated.timing(scale, {
               toValue: 1,
-              duration: 1000,
+              duration: getDuration(1000),
               easing: Easing.inOut(Easing.ease),
               useNativeDriver: true,
             }),
             Animated.timing(opacity, {
               toValue: 0.5,
-              duration: 1000,
+              duration: getDuration(1000),
               useNativeDriver: true,
             }),
           ]),
@@ -126,7 +133,7 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
       Animated.loop(
         Animated.timing(rotation, {
           toValue: 1,
-          duration: 2000,
+          duration: getDuration(2000),
           easing: Easing.linear,
           useNativeDriver: true,
         })
@@ -184,6 +191,7 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
     rotation,
     waveScales,
     waveOpacities,
+    speed,
   ]);
 
   const spin = rotation.interpolate({
@@ -191,12 +199,23 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
     outputRange: ["0deg", "360deg"],
   });
 
+  // Calculate actual circle size based on screen width and size prop
+  const actualCircleSize = width * size;
+
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        { width: actualCircleSize, height: actualCircleSize },
+      ]}
+    >
       <Animated.View
         style={[
           styles.circle,
           {
+            width: actualCircleSize,
+            height: actualCircleSize,
+            borderRadius: actualCircleSize / 2,
             transform: [{ scale }, { rotate: spin }],
             opacity,
             backgroundColor: isTtsPlaying
@@ -215,6 +234,9 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
             style={[
               styles.waveSegment,
               {
+                width: actualCircleSize * 0.8,
+                height: actualCircleSize * 0.8,
+                borderRadius: actualCircleSize / 2,
                 transform: [
                   { scale: waveScale },
                   { rotate: `${(index * 360) / WAVE_COUNT}deg` },
@@ -235,6 +257,9 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
           style={[
             styles.innerCircle,
             {
+              width: actualCircleSize * 0.7,
+              height: actualCircleSize * 0.7,
+              borderRadius: (actualCircleSize * 0.7) / 2,
               backgroundColor: isTtsPlaying
                 ? COLORS.accent
                 : isListening
@@ -255,13 +280,8 @@ const styles = StyleSheet.create({
   container: {
     justifyContent: "center",
     alignItems: "center",
-    width: CIRCLE_SIZE,
-    height: CIRCLE_SIZE,
   },
   circle: {
-    width: CIRCLE_SIZE,
-    height: CIRCLE_SIZE,
-    borderRadius: CIRCLE_SIZE / 2,
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
@@ -275,16 +295,10 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   innerCircle: {
-    width: CIRCLE_SIZE * 0.7,
-    height: CIRCLE_SIZE * 0.7,
-    borderRadius: (CIRCLE_SIZE * 0.7) / 2,
     position: "absolute",
   },
   waveSegment: {
     position: "absolute",
-    width: CIRCLE_SIZE * 0.8,
-    height: CIRCLE_SIZE * 0.8,
-    borderRadius: CIRCLE_SIZE / 2,
     borderWidth: 2,
     backgroundColor: "transparent",
   },

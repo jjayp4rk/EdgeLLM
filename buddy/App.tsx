@@ -426,21 +426,6 @@ function App(): React.JSX.Element {
 
   const renderVoiceAssistant = () => (
     <View style={styles.container}>
-      <TouchableOpacity
-        style={[
-          styles.settingsButton,
-          isTtsPlaying && styles.settingsButtonDisabled,
-        ]}
-        onPress={handleSettingsPress}
-        disabled={isTtsPlaying}
-      >
-        <MaterialCommunityIcons
-          name="cog"
-          size={24}
-          color={isTtsPlaying ? COLORS.text.disabled : COLORS.text.secondary}
-        />
-      </TouchableOpacity>
-
       <View style={styles.contentContainer}>
         <Text style={styles.assistantTitle}>How can I help you today?</Text>
 

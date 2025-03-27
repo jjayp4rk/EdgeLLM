@@ -291,13 +291,13 @@ export const styles = StyleSheet.create({
     fontSize: 18,
     color: COLORS.text.secondary,
     textAlign: "center",
-    marginBottom: 80,
+    marginBottom: 40,
     paddingHorizontal: 32,
     marginHorizontal: 32,
     lineHeight: 24,
   },
   welcomeFeatures: {
-    width: "90%",
+    width: "85%",
     marginBottom: 80,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -331,12 +331,7 @@ export const styles = StyleSheet.create({
 
   // Download Screen Styles
   downloadCard: {
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    padding: 32,
-    elevation: 5,
+    backgroundColor: "white",
     marginHorizontal: 32,
   },
   downloadTitle: {
@@ -346,13 +341,14 @@ export const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 8,
     textAlign: "center",
+    marginHorizontal: 64,
   },
   downloadSubtitle: {
     fontSize: 16,
     color: COLORS.text.secondary,
     textAlign: "center",
     marginBottom: 32,
-    marginHorizontal: 48,
+    marginHorizontal: 64,
   },
   progressContainer: {
     width: "100%",
