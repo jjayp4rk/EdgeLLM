@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { View, StyleSheet, Dimensions, Animated, Easing } from "react-native";
 import { useVoiceStore } from "../../store/voiceStore";
 import { COLORS } from "../../config/colors";
+import { StatusIndicator } from "./StatusIndicator";
 
 const { width } = Dimensions.get("window");
 const CIRCLE_SIZE = width * 0.5;
@@ -129,27 +130,23 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
         ])
       ).start();
     } else if (isProcessing) {
-      // Rotating animation when processing
+      // Simple pulsing animation for processing
       Animated.loop(
-        Animated.timing(rotation, {
-          toValue: 1,
-          duration: getDuration(2000),
-          easing: Easing.linear,
-          useNativeDriver: true,
-        })
+        Animated.sequence([
+          Animated.timing(scale, {
+            toValue: 1.1,
+            duration: getDuration(1000),
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(scale, {
+            toValue: 1,
+            duration: getDuration(1000),
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
       ).start();
-
-      // Set static scale and opacity
-      Animated.parallel([
-        Animated.spring(scale, {
-          toValue: 1.1,
-          useNativeDriver: true,
-        }),
-        Animated.spring(opacity, {
-          toValue: 0.7,
-          useNativeDriver: true,
-        }),
-      ]).start();
     } else {
       // Reset to default state
       Animated.parallel([
@@ -203,12 +200,7 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
   const actualCircleSize = width * size;
 
   return (
-    <View
-      style={[
-        styles.container,
-        { width: actualCircleSize, height: actualCircleSize },
-      ]}
-    >
+    <View style={styles.container}>
       <Animated.View
         style={[
           styles.circle,
@@ -271,6 +263,9 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
             },
           ]}
         />
+        <View style={styles.statusContainer}>
+          <StatusIndicator />
+        </View>
       </Animated.View>
     </View>
   );
@@ -301,5 +296,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     borderWidth: 2,
     backgroundColor: "transparent",
+  },
+  statusContainer: {
+    position: "absolute",
+    zIndex: 1,
   },
 });

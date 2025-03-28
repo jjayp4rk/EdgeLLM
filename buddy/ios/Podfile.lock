@@ -8,7 +8,7 @@ PODS:
   - hermes-engine (0.77.0):
     - hermes-engine/Pre-built (= 0.77.0)
   - hermes-engine/Pre-built (0.77.0)
-  - llama-rn (0.5.0):
+  - llama-rn (0.5.8):
     - DoubleConversion
     - glog
     - hermes-engine
@@ -1274,7 +1274,7 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
-  - react-native-voice (3.1.5):
+  - react-native-voice (3.2.4):
     - React-Core
   - React-nativeconfig (0.77.0)
   - React-NativeModulesApple (0.77.0):
@@ -1567,6 +1567,12 @@ PODS:
     - React-utils (= 0.77.0)
   - RNFS (2.20.0):
     - React-Core
+  - RNIap (12.16.2):
+    - RCT-Folly
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - ReactCommon/turbomodule/core
   - RNReanimated (3.17.1):
     - DoubleConversion
     - glog
@@ -1784,6 +1790,7 @@ DEPENDENCIES:
   - ReactCodegen (from `build/generated/ios`)
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
   - RNFS (from `../node_modules/react-native-fs`)
+  - RNIap (from `../node_modules/react-native-iap`)
   - RNReanimated (from `../node_modules/react-native-reanimated`)
   - RNVectorIcons (from `../node_modules/react-native-vector-icons`)
   - TextToSpeech (from `../node_modules/react-native-tts`)
@@ -1933,6 +1940,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   RNFS:
     :path: "../node_modules/react-native-fs"
+  RNIap:
+    :path: "../node_modules/react-native-iap"
   RNReanimated:
     :path: "../node_modules/react-native-reanimated"
   RNVectorIcons:
@@ -1950,7 +1959,7 @@ SPEC CHECKSUMS:
   fmt: a40bb5bd0294ea969aaaba240a927bd33d878cdd
   glog: eb93e2f488219332457c3c4eafd2738ddc7e80b8
   hermes-engine: 1f783c3d53940aed0d2c84586f0b7a85ab7827ef
-  llama-rn: bc26913388aa8aa256e254daa736c5bdd67e4d7c
+  llama-rn: 1de0b5d92a47bac12bbbc87bc4d62615d3fbd29e
   RCT-Folly: e78785aa9ba2ed998ea4151e314036f6c49e6d82
   RCTDeprecation: f5c19ebdb8804b53ed029123eb69914356192fc8
   RCTRequired: 6ae6cebe470486e0e0ce89c1c0eabb998e7c51f4
@@ -1981,7 +1990,7 @@ SPEC CHECKSUMS:
   React-Mapbuffer: 99bd566147aaa78e872568be53ebca8a4449ddae
   React-microtasksnativemodule: 51e7813abf875408a0f367e473a65bbab6aa8481
   react-native-slider: bb7eb4732940fab78217e1c096bb647d8b0d1cf3
-  react-native-voice: ed12d69e296a38e3b6ef662cb70126e5768fd134
+  react-native-voice: 908a0eba96c8c3d643e4f98b7232c6557d0a6f9c
   React-nativeconfig: cd0fbb40987a9658c24dab5812c14e5522a64929
   React-NativeModulesApple: 4a9c304aa4fb086af32e8758ba892386d895b4d3
   React-perflogger: 721172bda31a65ce7b7a0c3bf3de96f12ef6f45d
@@ -2012,12 +2021,13 @@ SPEC CHECKSUMS:
   ReactCodegen: c08a5113d9c9c895fe10f3c296f74c6b705a60a9
   ReactCommon: 1bd2dc684d7992acbf0dfee887b89a57a1ead86d
   RNFS: 89de7d7f4c0f6bafa05343c578f61118c8282ed8
+  RNIap: d73cedfb73b396cad75f90f4ed7d64352d6381cf
   RNReanimated: 86aaf0407803b713a7aa47ac086730f409672b91
   RNVectorIcons: bd818296a51dc2bb8c3bd97a3ca399df1afe216d
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   TextToSpeech: 89b239221ec378d213af422d14789a729705360b
   Yoga: 78d74e245ed67bb94275a1316cdc170b9b7fe884
 
-PODFILE CHECKSUM: c87e41f563d0ddc313b7bed8472ae83fd762510d
+PODFILE CHECKSUM: 90217b1668fcb5f8c7fd6015913f7e748d17a397
 
 COCOAPODS: 1.16.2

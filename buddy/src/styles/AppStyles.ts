@@ -208,11 +208,6 @@ export const styles = StyleSheet.create({
     backgroundColor: COLORS.background.accent,
     opacity: 0.7,
   },
-  micInstructions: {
-    fontSize: 16,
-    color: COLORS.text.secondary,
-    marginTop: 8,
-  },
   messagesContainer: {
     flex: 1,
     padding: 16,

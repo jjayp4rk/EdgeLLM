@@ -49,6 +49,7 @@ export const initializeTtsListeners = async () => {
     useVoiceStore.getState().setIsTtsPlaying(false);
     useVoiceStore.getState().setIsProcessing(false);
     useVoiceStore.getState().setTtsProgress(1);
+    useVoiceStore.getState().setAiGenerating(false);
   });
 
   // Listener for when TTS is canceled

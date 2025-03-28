@@ -14,7 +14,6 @@ import { initLlama, releaseAllLlama } from "llama.rn";
 import { downloadModel } from "./src/api/model";
 import ProgressBar from "./src/components/ProgressBar";
 import { initializeTtsListeners, playTTS } from "./src/ttsListeners";
-import { WaveformAvatar } from "./src/components/VoiceInterface/MemojiAvatar";
 import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
 import Voice, {
   SpeechResultsEvent,
@@ -33,7 +32,6 @@ function App(): React.JSX.Element {
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [messages, setMessages] = useState<Message[]>(INITIAL_CONVERSATION);
   const messagesRef = useRef<Message[]>(INITIAL_CONVERSATION);
-  const [aiGenerating, setAiGenerating] = useState(false);
   const [context, setContext] = useState<any>(null);
   const contextRef = useRef<any>(null);
   const [appState, setAppState] = useState<AppState>("welcome");
@@ -44,11 +42,13 @@ function App(): React.JSX.Element {
     isListening,
     isProcessing,
     isTtsPlaying,
+    aiGenerating,
     currentSpeech,
     setIsListening,
     setIsProcessing,
     setIsTtsPlaying,
     setCurrentSpeech,
+    setAiGenerating,
     reset: resetVoiceState,
   } = useVoiceStore();
 
@@ -241,7 +241,7 @@ function App(): React.JSX.Element {
         setAppState("welcome");
       }
     } finally {
-      // Only reset processing states after everything is complete
+      // Reset all processing states
       setCurrentSpeech("");
     }
   };
@@ -443,7 +443,7 @@ function App(): React.JSX.Element {
               (isProcessing || isTtsPlaying) && styles.micButtonDisabled,
             ]}
             onPress={handleMicPress}
-            disabled={isProcessing || aiGenerating || isTtsPlaying}
+            disabled={isProcessing || isTtsPlaying || aiGenerating}
             activeOpacity={0.7}
           >
             <MaterialCommunityIcons
@@ -458,16 +458,6 @@ function App(): React.JSX.Element {
               }
             />
           </TouchableOpacity>
-
-          {/* <Text style={styles.micInstructions}>
-            {isListening
-              ? "Listening..."
-              : isProcessing
-              ? "Processing..."
-              : isTtsPlaying
-              ? "Speaking..."
-              : "Tap to start talking"}
-          </Text> */}
         </View>
       </View>
     </View>
