@@ -33,6 +33,7 @@ target 'Buddy' do
       :mac_catalyst_enabled => false
     )
 
+    # Fix build phase warnings
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |config|
         # Basic settings
@@ -74,7 +75,16 @@ target 'Buddy' do
         ]
       end
 
-      # Generate proper xcfilelist files for Xcode Cloud
+      # Fix build phase warnings
+      target.build_phases.each do |build_phase|
+        if build_phase.is_a?(Xcodeproj::Project::Object::PBXShellScriptBuildPhase)
+          build_phase.always_out_of_date = "1"
+        end
+      end
+    end
+
+    # Generate proper xcfilelist files for Xcode Cloud
+    installer.pods_project.targets.each do |target|
       if target.name == 'Pods-Buddy'
         create_xcode_cloud_files(target, installer)
       end
@@ -85,11 +95,23 @@ end
 def create_xcode_cloud_files(target, installer)
   support_files_dir = "Pods/Target Support Files/#{target.name}"
   
-  # Create framework list files
-  File.write("#{support_files_dir}/#{target.name}-frameworks-Release-input-files.xcfilelist", "")
-  File.write("#{support_files_dir}/#{target.name}-frameworks-Release-output-files.xcfilelist", "")
+  # Create directories if they don't exist
+  FileUtils.mkdir_p(support_files_dir)
   
-  # Create resource list files
-  File.write("#{support_files_dir}/#{target.name}-resources-Release-input-files.xcfilelist", "")
-  File.write("#{support_files_dir}/#{target.name}-resources-Release-output-files.xcfilelist", "")
+  # Create framework list files with proper content
+  framework_input = "#{support_files_dir}/#{target.name}-frameworks-Release-input-files.xcfilelist"
+  framework_output = "#{support_files_dir}/#{target.name}-frameworks-Release-output-files.xcfilelist"
+  resource_input = "#{support_files_dir}/#{target.name}-resources-Release-input-files.xcfilelist"
+  resource_output = "#{support_files_dir}/#{target.name}-resources-Release-output-files.xcfilelist"
+  
+  # Write proper content to files
+  File.write(framework_input, "/* Frameworks */\n")
+  File.write(framework_output, "/* Frameworks */\n")
+  File.write(resource_input, "/* Resources */\n")
+  File.write(resource_output, "/* Resources */\n")
+  
+  # Set proper permissions
+  [framework_input, framework_output, resource_input, resource_output].each do |file|
+    File.chmod(0644, file)
+  end
 end
