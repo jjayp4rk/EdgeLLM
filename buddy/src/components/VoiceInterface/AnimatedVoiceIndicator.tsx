@@ -2,10 +2,12 @@ import React, { useEffect, useRef } from "react";
 import { View, StyleSheet, Dimensions, Animated, Easing } from "react-native";
 import { useVoiceStore } from "../../store/voiceStore";
 import { COLORS } from "../../config/colors";
-import { StatusIndicator } from "./StatusIndicator";
+import ReadyImage from "../../assets/images/ready.png";
+import ListeningImage from "../../assets/images/listening.png";
+import TalkingImage from "../../assets/images/talking.png";
+import ThinkingImage from "../../assets/images/thinking.png";
 
 const { width } = Dimensions.get("window");
-const CIRCLE_SIZE = width * 0.5;
 const WAVE_COUNT = 8; // Number of wave segments
 
 interface Props {
@@ -43,7 +45,52 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
 
   useEffect(() => {
     if (isTtsPlaying) {
-      // Create a wave animation for TTS
+      // Helper function to get random value within a range
+      const getRandomInRange = (min: number, max: number) => {
+        return Math.random() * (max - min) + min;
+      };
+
+      // Create a sequence of random pulses
+      const createRandomPulseSequence = () => {
+        const numPulses = Math.floor(getRandomInRange(2, 5)); // 2-4 pulses per sequence
+        const sequence = [];
+
+        for (let i = 0; i < numPulses; i++) {
+          // Random scale up
+          sequence.push(
+            Animated.timing(scale, {
+              toValue: getRandomInRange(1.02, 1.08),
+              duration: getDuration(getRandomInRange(100, 200)),
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            })
+          );
+
+          // Random scale down
+          sequence.push(
+            Animated.timing(scale, {
+              toValue: getRandomInRange(0.92, 0.98),
+              duration: getDuration(getRandomInRange(100, 200)),
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            })
+          );
+        }
+
+        // Add a small pause at the end of each sequence
+        sequence.push(
+          Animated.timing(scale, {
+            toValue: 1,
+            duration: getDuration(getRandomInRange(200, 400)),
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          })
+        );
+
+        return sequence;
+      };
+
+      // Create wave animation for TTS
       const animations = waveScales.map((waveScale, index) => {
         const delay = (index * 100) / speed;
         return Animated.loop(
@@ -79,23 +126,18 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
         );
       });
 
-      // Start all wave animations
-      animations.forEach((animation) => animation.start());
+      // Create and start the random pulse animation
+      const pulseAnimation = Animated.loop(
+        Animated.sequence(createRandomPulseSequence())
+      );
 
-      // Set static scale and opacity for TTS
-      Animated.parallel([
-        Animated.spring(scale, {
-          toValue: 1.1,
-          useNativeDriver: true,
-        }),
-        Animated.spring(opacity, {
-          toValue: 0.7,
-          useNativeDriver: true,
-        }),
-      ]).start();
+      // Start all animations
+      animations.forEach((animation) => animation.start());
+      pulseAnimation.start();
 
       return () => {
         animations.forEach((animation) => animation.stop());
+        pulseAnimation.stop();
       };
     } else if (isListening) {
       // Pulsing animation when listening
@@ -191,13 +233,15 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
     speed,
   ]);
 
-  const spin = rotation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
-
   // Calculate actual circle size based on screen width and size prop
   const actualCircleSize = width * size;
+
+  const getStateImage = () => {
+    if (isTtsPlaying) return TalkingImage;
+    if (isProcessing) return ThinkingImage;
+    if (isListening) return ListeningImage;
+    return ReadyImage;
+  };
 
   return (
     <View style={styles.container}>
@@ -207,65 +251,24 @@ export const AnimatedVoiceIndicator: React.FC<Props> = ({
           {
             width: actualCircleSize,
             height: actualCircleSize,
+            transform: [{ scale }],
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "white",
             borderRadius: actualCircleSize / 2,
-            transform: [{ scale }, { rotate: spin }],
-            opacity,
-            backgroundColor: isTtsPlaying
-              ? COLORS.accent
-              : isListening
-              ? COLORS.secondary
-              : isProcessing
-              ? COLORS.highlight
-              : COLORS.primary,
+            overflow: "hidden",
           },
         ]}
       >
-        {waveScales.map((waveScale, index) => (
-          <Animated.View
-            key={index}
-            style={[
-              styles.waveSegment,
-              {
-                width: actualCircleSize * 0.8,
-                height: actualCircleSize * 0.8,
-                borderRadius: actualCircleSize / 2,
-                transform: [
-                  { scale: waveScale },
-                  { rotate: `${(index * 360) / WAVE_COUNT}deg` },
-                ],
-                opacity: waveOpacities[index],
-                borderColor: isTtsPlaying
-                  ? COLORS.accent
-                  : isListening
-                  ? COLORS.secondary
-                  : isProcessing
-                  ? COLORS.highlight
-                  : COLORS.primary,
-              },
-            ]}
-          />
-        ))}
-        <View
-          style={[
-            styles.innerCircle,
-            {
-              width: actualCircleSize * 0.7,
-              height: actualCircleSize * 0.7,
-              borderRadius: (actualCircleSize * 0.7) / 2,
-              backgroundColor: isTtsPlaying
-                ? COLORS.accent
-                : isListening
-                ? COLORS.secondary
-                : isProcessing
-                ? COLORS.highlight
-                : COLORS.primary,
-              opacity: 0.8,
-            },
-          ]}
+        <Animated.Image
+          source={getStateImage()}
+          style={{
+            width: actualCircleSize,
+            height: actualCircleSize,
+            opacity: 1,
+          }}
+          resizeMode="contain"
         />
-        <View style={styles.statusContainer}>
-          <StatusIndicator />
-        </View>
       </Animated.View>
     </View>
   );
@@ -288,17 +291,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
-  },
-  innerCircle: {
-    position: "absolute",
-  },
-  waveSegment: {
-    position: "absolute",
-    borderWidth: 2,
-    backgroundColor: "transparent",
-  },
-  statusContainer: {
-    position: "absolute",
-    zIndex: 1,
   },
 });

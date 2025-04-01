@@ -1,14 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   SafeAreaView,
-  ScrollView,
   Text,
   View,
   Alert,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
+  Image,
 } from "react-native";
 import { initLlama, releaseAllLlama } from "llama.rn";
 import { downloadModel } from "./src/api/model";
@@ -27,15 +26,20 @@ import { AnimatedVoiceIndicator } from "./src/components/VoiceInterface/Animated
 import { useVoiceStore } from "./src/store/voiceStore";
 import { COLORS } from "./src/config/colors";
 
+// Update image imports to use require
+const BuddyIcon = require("./src/assets/images/buddy_icon.png");
+const ReadyIcon = require("./src/assets/images/ready.png");
+const ListeningIcon = require("./src/assets/images/listening.png");
+const TalkingIcon = require("./src/assets/images/talking.png");
+const ThinkingIcon = require("./src/assets/images/thinking.png");
+
 function App(): React.JSX.Element {
-  const [progress, setProgress] = useState<number>(0);
-  const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [messages, setMessages] = useState<Message[]>(INITIAL_CONVERSATION);
   const messagesRef = useRef<Message[]>(INITIAL_CONVERSATION);
   const [context, setContext] = useState<any>(null);
   const contextRef = useRef<any>(null);
   const [appState, setAppState] = useState<AppState>("welcome");
-  const [downloadedModels, setDownloadedModels] = useState<string[]>([]);
+  const [downloadProgress, setDownloadProgress] = useState(0);
 
   // Use Zustand store for voice states
   const {
@@ -43,10 +47,8 @@ function App(): React.JSX.Element {
     isProcessing,
     isTtsPlaying,
     aiGenerating,
-    currentSpeech,
     setIsListening,
     setIsProcessing,
-    setIsTtsPlaying,
     setCurrentSpeech,
     setAiGenerating,
     reset: resetVoiceState,
@@ -84,28 +86,8 @@ function App(): React.JSX.Element {
     };
   }, []); // Only run once on mount
 
-  // Check for downloaded models on mount
-  useEffect(() => {
-    const checkDownloadedModels = async () => {
-      try {
-        const files = await RNFS.readDir(RNFS.DocumentDirectoryPath);
-        const ggufFiles = files
-          .filter((file) => file.name.endsWith(".gguf"))
-          .map((file) => file.name);
-        setDownloadedModels(ggufFiles);
-      } catch (error) {
-        console.error("[App] Error checking downloaded models:", error);
-      }
-    };
-
-    checkDownloadedModels();
-  }, []);
-
   const handleGetStarted = async () => {
     try {
-      setAppState("downloading");
-      setIsDownloading(true);
-      setProgress(0);
       const destPath = `${RNFS.DocumentDirectoryPath}/${MODEL_CONFIG.FILE}`;
 
       // Check if file already exists
@@ -113,9 +95,9 @@ function App(): React.JSX.Element {
 
       if (!exists) {
         console.log("[App] Starting model download from:", MODEL_CONFIG.URL);
+        setAppState("downloading");
         await downloadModel(MODEL_CONFIG.FILE, MODEL_CONFIG.URL, (progress) => {
-          // Convert progress to decimal (0-1) if it's coming as percentage (0-100)
-          setProgress(progress / 100);
+          setDownloadProgress(progress);
         });
       }
 
@@ -124,6 +106,9 @@ function App(): React.JSX.Element {
         setContext(null);
         setMessages(INITIAL_CONVERSATION);
       }
+
+      setAppState("ready");
+
       // Initialize the model
       console.log("[App] Initializing model from:", destPath);
       const newContext = await initLlama({
@@ -135,14 +120,10 @@ function App(): React.JSX.Element {
 
       setContext(newContext);
       console.log("[App] Model initialized successfully");
-      setAppState("ready");
     } catch (error) {
       console.error("[App] Error initializing model:", error);
       Alert.alert("Error", "Failed to initialize the model. Please try again.");
       setAppState("welcome");
-    } finally {
-      setIsDownloading(false);
-      setProgress(0);
     }
   };
 
@@ -358,10 +339,20 @@ function App(): React.JSX.Element {
     }
   }, [isListening, stopListening, context]);
 
+  const handleRefresh = () => {
+    setMessages(INITIAL_CONVERSATION);
+    resetVoiceState();
+  };
+
   const renderWelcomeScreen = () => (
     <View style={styles.container}>
       <View style={styles.welcomeCard}>
-        <Text style={styles.welcomeTitle}>Buddy</Text>
+        <Text style={styles.welcomeTitle}>BuddyAI</Text>
+        <Image
+          source={BuddyIcon}
+          style={styles.welcomeIcon}
+          resizeMode="contain"
+        />
         <Text style={styles.welcomeSubtitle}>
           Your friendly AI pal that's always here to help and chat
         </Text>
@@ -413,27 +404,46 @@ function App(): React.JSX.Element {
         size={80}
         color={COLORS.primary}
       />
-      <Text style={styles.downloadTitle}>Preparing Your AI Assistant</Text>
+      <Text style={styles.downloadTitle}>Preparing BuddyAI</Text>
       <Text style={styles.downloadSubtitle}>
-        This only happens once. We're downloading the AI model to your device.
+        This only happens once. We're setting up BuddyAI on your device.
       </Text>
       <View style={styles.progressContainer}>
-        <ProgressBar progress={progress} />
-        <Text style={styles.progressText}>{Math.round(progress * 100)}%</Text>
+        <ProgressBar progress={downloadProgress} />
+        <Text style={styles.progressText}>{downloadProgress}%</Text>
       </View>
     </View>
   );
 
   const renderVoiceAssistant = () => (
     <View style={styles.container}>
-      <View style={styles.contentContainer}>
-        <Text style={styles.assistantTitle}>How can I help you today?</Text>
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={handleRefresh}
+          activeOpacity={0.7}
+        >
+          <MaterialCommunityIcons name="refresh" size={28} color="#2563EB" />
+        </TouchableOpacity>
 
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={() => setAppState("welcome")}
+          activeOpacity={0.7}
+          disabled={true}
+        >
+          <MaterialCommunityIcons name="cog" size={28} color="#2563EB" />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.contentContainer}>
+        <Text style={styles.headerTitle}>How can I help you today?</Text>
         <View style={styles.voiceContainer}>
           <AnimatedVoiceIndicator
             isListening={isListening}
             isProcessing={isProcessing}
             isTtsPlaying={isTtsPlaying}
+            size={0.45}
           />
 
           <TouchableOpacity
@@ -462,8 +472,6 @@ function App(): React.JSX.Element {
       </View>
     </View>
   );
-
-  console.log("Messages", messages);
 
   return (
     <SafeAreaView style={styles.container}>

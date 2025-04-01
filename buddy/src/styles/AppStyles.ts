@@ -1,4 +1,4 @@
-import { StyleSheet, Dimensions } from "react-native";
+import { StyleSheet, Dimensions, Platform } from "react-native";
 import { COLORS } from "../config/colors";
 
 const { width } = Dimensions.get("window");
@@ -9,7 +9,6 @@ export const styles = StyleSheet.create({
     backgroundColor: COLORS.background.primary,
     alignItems: "center",
     justifyContent: "center",
-    padding: 20,
   },
   scrollView: {
     flex: 1,
@@ -166,15 +165,37 @@ export const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     width: "100%",
-    maxWidth: 500,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 30,
+  },
+  header: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: Platform.OS === "ios" ? 60 : 20,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    zIndex: 10,
+  },
+  headerButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: COLORS.text.primary,
+    textAlign: "center",
+    marginBottom: 40,
   },
   assistantTitle: {
     fontSize: 24,
     fontWeight: "700",
     color: COLORS.text.primary,
-    marginBottom: 48,
     textAlign: "center",
   },
   waveformContainer: {
@@ -186,6 +207,7 @@ export const styles = StyleSheet.create({
   },
   voiceContainer: {
     alignItems: "center",
+    justifyContent: "center",
   },
   micButton: {
     backgroundColor: COLORS.background.secondary,
@@ -194,7 +216,7 @@ export const styles = StyleSheet.create({
     borderRadius: 36,
     alignItems: "center",
     justifyContent: "center",
-    marginVertical: 24,
+    marginTop: 24,
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -269,27 +291,40 @@ export const styles = StyleSheet.create({
   },
   // Welcome Screen Styles
   welcomeCard: {
-    width: "100%",
-    maxWidth: 500,
-    alignItems: "center",
+    backgroundColor: "white",
+    borderRadius: 24,
     padding: 24,
-    paddingTop: 120,
+    width: "90%",
+    maxWidth: 400,
+    alignItems: "center",
   },
   welcomeTitle: {
-    fontSize: 48,
+    fontSize: 32,
     fontWeight: "700",
     color: COLORS.text.primary,
     marginBottom: 16,
     textAlign: "center",
   },
+  welcomeIcon: {
+    width: 120,
+    height: 120,
+    marginBottom: 24,
+    borderRadius: 60,
+    backgroundColor: COLORS.background.primary,
+    shadowColor: COLORS.primary,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
   welcomeSubtitle: {
-    fontSize: 18,
+    fontSize: 16,
     color: COLORS.text.secondary,
     textAlign: "center",
-    marginBottom: 40,
-    paddingHorizontal: 32,
-    marginHorizontal: 32,
-    lineHeight: 24,
+    marginBottom: 32,
   },
   welcomeFeatures: {
     width: "85%",
